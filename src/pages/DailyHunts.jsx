@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Target, Trophy, Clock, Star, Zap, ChevronRight, Flame } from 'lucide-react';
+import { Target, Trophy, Clock, Star, Zap, ChevronRight, Flame, Navigation } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 
 const MOCK_HUNTS = [
@@ -89,6 +90,12 @@ const DIFF_COLORS = {
 export default function DailyHunts() {
   const [tab, setTab] = useState('hunts');
   const [expandedHunt, setExpandedHunt] = useState(null);
+  const navigate = useNavigate();
+
+  const startHunt = (hunt) => {
+    localStorage.setItem('uniquesky_active_hunt', hunt.target_star);
+    navigate('/');
+  };
 
   const completedCount = MOCK_HUNTS.filter(h => h.completed).length;
   const totalPoints = MOCK_HUNTS.filter(h => h.completed).reduce((sum, h) => sum + h.points, 0);
@@ -191,9 +198,14 @@ export default function DailyHunts() {
                     <p className="text-xs text-muted-foreground font-inter"><span className="text-star-gold font-semibold">Hint: </span>{hunt.hint}</p>
                   </div>
                   {!hunt.completed && (
-                    <div className="mt-3 flex items-center gap-2 text-xs text-accent font-space">
-                      <Star size={12} fill="currentColor" />
-                      Open the Sky view and tap {hunt.target_star} to complete
+                    <div className="mt-3 flex items-center gap-2">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); startHunt(hunt); }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent/20 text-accent border border-accent/30 text-xs font-space hover:bg-accent/30 transition-all"
+                      >
+                        <Navigation size={11} /> Hunt in AR Sky
+                      </button>
+                      <span className="text-xs text-muted-foreground font-inter">Tap {hunt.target_star} to complete</span>
                     </div>
                   )}
                 </motion.div>

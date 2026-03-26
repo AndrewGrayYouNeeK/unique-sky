@@ -1,8 +1,19 @@
 import { useState } from 'react';
-import { ChevronLeft, ChevronRight, Clock } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock, Sun } from 'lucide-react';
 
 const MIN_YEAR = -5000;
 const MAX_YEAR = 5000;
+
+// Famous sky events with year offsets from 2026
+const SKY_EVENTS = [
+  { label: '🌑 Solar Eclipse', yearOffset: -1, desc: 'Total solar eclipse 2025' },
+  { label: '☄️ Halley', yearOffset: -41, desc: "Halley's Comet 1985" },
+  { label: '🌑 Totality', yearOffset: 2, desc: 'Solar eclipse 2028' },
+  { label: '☄️ Comet', yearOffset: 55, desc: 'Halley returns 2061' },
+  { label: '🌟 Supernova', yearOffset: -2049, desc: 'Supernova 1054 → Crab Nebula' },
+  { label: '🏛️ Pyramids', yearOffset: -4526, desc: 'Sky when pyramids were built' },
+  { label: '🌅 Stonehenge', yearOffset: -3526, desc: 'Stonehenge aligned sky' },
+];
 
 export default function TimeSlider({ yearOffset, onChange }) {
   const [isDragging, setIsDragging] = useState(false);
@@ -90,7 +101,7 @@ export default function TimeSlider({ yearOffset, onChange }) {
       </div>
 
       {/* Quick jumps */}
-      <div className="flex gap-1 flex-wrap">
+      <div className="flex gap-1 flex-wrap mb-3">
         {quickJumps.map(jump => (
           <button
             key={jump.label}
@@ -104,6 +115,30 @@ export default function TimeSlider({ yearOffset, onChange }) {
             {jump.label}
           </button>
         ))}
+      </div>
+
+      {/* Sky events */}
+      <div className="border-t border-border/30 pt-2">
+        <div className="flex items-center gap-1.5 mb-2">
+          <Sun size={10} className="text-star-gold" />
+          <span className="text-[10px] font-space uppercase tracking-widest text-muted-foreground">Famous Events</span>
+        </div>
+        <div className="flex gap-1 overflow-x-auto pb-1">
+          {SKY_EVENTS.map(event => (
+            <button
+              key={event.label}
+              onClick={() => onChange(event.yearOffset)}
+              title={event.desc}
+              className={`flex-shrink-0 px-2 py-1 rounded-lg text-[10px] font-space transition-all border ${
+                Math.abs(yearOffset - event.yearOffset) < 5
+                  ? 'bg-accent/20 text-accent border-accent/30'
+                  : 'bg-muted/40 text-muted-foreground border-transparent hover:border-border hover:text-foreground'
+              }`}
+            >
+              {event.label}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );

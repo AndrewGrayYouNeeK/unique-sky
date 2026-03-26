@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Star, Crown, Mic, Check, Lock, AlertCircle } from 'lucide-react';
+import { X, Star, Crown, Mic, Check, Lock, AlertCircle, WifiOff, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -44,7 +44,7 @@ const TIERS = [
   },
 ];
 
-export default function StarPurchaseModal({ star, onClose, onSuccess }) {
+export default function StarPurchaseModal({ star, onClose, onSuccess, isOffline = false, onOfflineClaim }) {
   const [selectedTier, setSelectedTier] = useState('premium');
   const [step, setStep] = useState('select'); // select | details | payment | success
   const [buyerName, setBuyerName] = useState('');
@@ -65,18 +65,26 @@ export default function StarPurchaseModal({ star, onClose, onSuccess }) {
     setError('');
     setLoading(true);
 
-    try {
-      // Claim star via backend function
-      const res = await base44.functions.invoke('claimStar', {
-        star_id: star.id,
-        star_name: star.name,
-        buyer_name: buyerName.trim(),
-        buyer_email: buyerEmail.trim(),
-        tier: selectedTier,
-        custom_myth: selectedTier === 'premium' ? customMyth : '',
-        amount_cents: tier.price * 100,
-      });
+    const claimPayload = {
+      star_id: star.id || star.hip_id,
+      star_name: star.name,
+      buyer_name: buyerName.trim(),
+      buyer_email: buyerEmail.trim(),
+      tier: selectedTier,
+      custom_myth: selectedTier === 'premium' ? customMyth : '',
+      amount_cents: tier.price * 100,
+    };
 
+    // Offline queue — claim locally, sync on reconnect
+    if (isOffline) {
+      if (onOfflineClaim) onOfflineClaim(claimPayload);
+      setStep('queued');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const res = await base44.functions.invoke('claimStar', claimPayload);
       if (res.data?.success) {
         setStep('success');
         if (onSuccess) onSuccess({ ...star, owner_name: buyerName, is_named: true, ownership_tier: selectedTier });
@@ -84,7 +92,13 @@ export default function StarPurchaseModal({ star, onClose, onSuccess }) {
         setError(res.data?.error || 'This star has already been claimed. Please choose another.');
       }
     } catch (err) {
-      setError('Purchase failed. Please try again.');
+      // Auto-queue on network failure
+      if (onOfflineClaim) {
+        onOfflineClaim(claimPayload);
+        setStep('queued');
+      } else {
+        setError('Purchase failed. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -238,6 +252,27 @@ export default function StarPurchaseModal({ star, onClose, onSuccess }) {
                 <p className="text-center text-xs text-muted-foreground">
                   Symbolic ownership · Not official astronomical naming · No refunds after claim
                 </p>
+              </motion.div>
+            )}
+
+            {step === 'queued' && (
+              <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center py-4">
+                <div className="w-20 h-20 mx-auto rounded-full bg-secondary/20 border border-secondary/40 flex items-center justify-center mb-4">
+                  <Clock size={36} className="text-secondary" />
+                </div>
+                <h3 className="text-xl font-space font-bold text-foreground mb-2">Claim Queued!</h3>
+                <div className="flex items-center justify-center gap-2 text-secondary text-sm font-space mb-3">
+                  <WifiOff size={14} /> You're offline
+                </div>
+                <p className="text-muted-foreground text-sm font-inter mb-2">
+                  Your claim for <span className="text-star-gold font-semibold">{star.name}</span> is saved locally.
+                </p>
+                <p className="text-muted-foreground text-xs font-inter mb-5">
+                  It will sync automatically when you reconnect. <strong className="text-foreground">Winner = earliest valid timestamp</strong> — your place in line is reserved.
+                </p>
+                <Button onClick={onClose} className="bg-secondary/80 text-foreground font-space font-semibold rounded-xl px-8">
+                  Got it
+                </Button>
               </motion.div>
             )}
 

@@ -1,37 +1,21 @@
 import { useRef, useEffect, useCallback } from 'react';
 import { BRIGHT_STARS, PLANETS, getStarColorHex, magnitudeToSize, magnitudeToOpacity } from '@/lib/starData';
 
-// Proper spherical projection: equatorial → horizontal → screen
-function equatorialToHorizontal(ra, dec, azimuth, altitude) {
-  const raRad = (ra * Math.PI) / 180;
-  const decRad = (dec * Math.PI) / 180;
-  const azRad = (azimuth * Math.PI) / 180;
-  const altRad = (altitude * Math.PI) / 180;
+// Direct RA/Dec → screen projection
+// azimuth pans the RA axis, altitude pans the Dec axis
+function projectToScreen(ra, dec, viewAz, viewAlt, fovRad, w, h) {
+  // Normalize RA difference with wrap-around
+  let dRa = ra - viewAz;
+  if (dRa > 180) dRa -= 360;
+  if (dRa < -180) dRa += 360;
+  const dDec = dec - viewAlt;
 
-  // Hour angle (simplified — treats RA as LST offset)
-  const ha = azRad - raRad;
+  const dRaRad = (dRa * Math.PI) / 180;
+  const dDecRad = (dDec * Math.PI) / 180;
 
-  // Alt-Az from equatorial
-  const sinAlt = Math.sin(decRad) * Math.sin(altRad) + Math.cos(decRad) * Math.cos(altRad) * Math.cos(ha);
-  const starAlt = Math.asin(Math.max(-1, Math.min(1, sinAlt)));
-
-  const cosAz = (Math.sin(decRad) - Math.sin(starAlt) * Math.sin(altRad)) /
-    (Math.cos(starAlt) * Math.cos(altRad) + 0.0001);
-  const starAz = Math.sin(ha) > 0
-    ? 2 * Math.PI - Math.acos(Math.max(-1, Math.min(1, cosAz)))
-    : Math.acos(Math.max(-1, Math.min(1, cosAz)));
-
-  return { az: starAz, alt: starAlt };
-}
-
-function projectToScreen(starAz, starAlt, viewAz, viewAlt, fovRad, w, h) {
-  const dAz = starAz - viewAz;
-  // Normalize to -PI..PI
-  const dAzNorm = Math.atan2(Math.sin(dAz), Math.cos(dAz));
-  const dAlt = starAlt - viewAlt;
   const scale = 1 / fovRad;
-  const x = w / 2 - dAzNorm * scale * w;
-  const y = h / 2 - dAlt * scale * h;
+  const x = w / 2 - dRaRad * scale * w;
+  const y = h / 2 - dDecRad * scale * h;
   return { x, y };
 }
 
@@ -43,16 +27,13 @@ export default function StarCanvas({
   const animFrameRef = useRef(null);
   const timeRef = useRef(Date.now());
 
-  const viewAzRad = (azimuth * Math.PI) / 180;
-  const viewAltRad = (altitude * Math.PI) / 180;
   const fovRad = (fov * Math.PI) / 180;
 
   const projectStar = useCallback((ra, dec, w, h) => {
     const precession = yearOffset * 0.013889;
     const adjustedRa = ((ra + precession) % 360 + 360) % 360;
-    const { az, alt } = equatorialToHorizontal(adjustedRa, dec, azimuth, altitude);
-    return projectToScreen(az, alt, viewAzRad, viewAltRad, fovRad, w, h);
-  }, [azimuth, altitude, yearOffset, viewAzRad, viewAltRad, fovRad]);
+    return projectToScreen(adjustedRa, dec, azimuth, altitude, fovRad, w, h);
+  }, [azimuth, altitude, yearOffset, fovRad]);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -70,9 +51,8 @@ export default function StarCanvas({
     // ── Altitude rings ──────────────────────────────────────────────
     const ringAlts = [0, 30, 60, 90];
     ringAlts.forEach(ringAlt => {
-      const ringAltRad = (ringAlt * Math.PI) / 180;
-      const dAlt = ringAltRad - viewAltRad;
-      const ry = h / 2 - dAlt * (h / fovRad);
+      const dAltRad = ((ringAlt - altitude) * Math.PI) / 180;
+      const ry = h / 2 - dAltRad * (h / fovRad);
       const rx = w * 0.9; // horizontal extent of ring
       ctx.save();
       ctx.strokeStyle = ringAlt === 0
@@ -299,7 +279,7 @@ export default function StarCanvas({
 
     ctx.restore(); // pop the scale
     animFrameRef.current = requestAnimationFrame(draw);
-  }, [azimuth, altitude, projectStar, ownedStars, huntTarget, showMythOverlay, fovRad]);
+  }, [altitude, projectStar, ownedStars, huntTarget, showMythOverlay, fovRad]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

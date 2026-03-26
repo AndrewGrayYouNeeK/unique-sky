@@ -28,6 +28,7 @@ export default function ARSkyView() {
   const [pendingClaims, setPendingClaims] = useState(hasPendingClaims());
   const [huntTarget, setHuntTarget] = useState(() => localStorage.getItem('uniquesky_active_hunt') || null);
   const [isDragging, setIsDragging] = useState(false);
+  const isDraggingRef = useRef(false);
   const dragStart = useRef(null);
   const motionPermAsked = useRef(false);
 
@@ -73,9 +74,10 @@ export default function ARSkyView() {
       .catch(() => {});
   }, []);
 
-  // Device orientation
+  // Device orientation — pauses while user is dragging
   useEffect(() => {
     const handleOrientation = (e) => {
+      if (isDraggingRef.current) return; // don't fight the drag
       if (e.alpha !== null && e.alpha !== undefined) {
         setHasMotion(true);
         setAzimuth(((e.alpha || 0) + 360) % 360);
@@ -98,14 +100,14 @@ export default function ARSkyView() {
     return () => window.removeEventListener('deviceorientation', handleOrientation);
   }, []);
 
-  // Manual drag/pan
+  // Manual drag/pan — always allowed, even when motion sensor is active
   const handlePointerDown = useCallback((e) => {
-    if (hasMotion) return;
+    isDraggingRef.current = true;
     setIsDragging(true);
     const cx = e.clientX ?? e.touches?.[0]?.clientX;
     const cy = e.clientY ?? e.touches?.[0]?.clientY;
     dragStart.current = { x: cx, y: cy, az: azimuth, alt: altitude };
-  }, [hasMotion, azimuth, altitude]);
+  }, [azimuth, altitude]);
 
   const handlePointerMove = useCallback((e) => {
     if (!isDragging || !dragStart.current) return;
@@ -118,6 +120,7 @@ export default function ARSkyView() {
   }, [isDragging]);
 
   const handlePointerUp = useCallback(() => {
+    isDraggingRef.current = false;
     setIsDragging(false);
     dragStart.current = null;
   }, []);

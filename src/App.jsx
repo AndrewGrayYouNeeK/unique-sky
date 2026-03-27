@@ -28,7 +28,7 @@ const AuthenticatedApp = () => {
               <span className="text-star-gold text-xl">✦</span>
             </div>
           </div>
-          <p className="nebula-text font-space font-bold text-xl">Unique Sky</p>
+          <p className="nebula-text font-space font-bold text-xl">YouneeK Stars</p>
           <p className="text-muted-foreground text-sm mt-1">Loading the cosmos...</p>
         </div>
       </div>

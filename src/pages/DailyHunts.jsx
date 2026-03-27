@@ -93,7 +93,7 @@ export default function DailyHunts() {
   const navigate = useNavigate();
 
   const startHunt = (hunt) => {
-    localStorage.setItem('uniquesky_active_hunt', hunt.target_star);
+    localStorage.setItem('youneekmeteor_active_hunt', hunt.target_star);
     navigate('/');
   };
 

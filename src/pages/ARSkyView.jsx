@@ -26,7 +26,7 @@ export default function ARSkyView() {
   const [hasMotion, setHasMotion] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [pendingClaims, setPendingClaims] = useState(hasPendingClaims());
-  const [huntTarget, setHuntTarget] = useState(() => localStorage.getItem('uniquesky_active_hunt') || null);
+  const [huntTarget, setHuntTarget] = useState(() => localStorage.getItem('youneekmeteor_active_hunt') || null);
   const [isDragging, setIsDragging] = useState(false);
   const isDraggingRef = useRef(false);
   const dragStart = useRef(null);
@@ -185,7 +185,7 @@ export default function ARSkyView() {
 
           {/* App title + status */}
           <div className="flex flex-col gap-1">
-            <h1 className="nebula-text font-space font-bold text-xl leading-none">Unique Sky</h1>
+            <h1 className="nebula-text font-space font-bold text-xl leading-none">YouneeK Stars</h1>
             <div className="flex items-center gap-2">
               {hasMotion ? (
                 <span className="flex items-center gap-1 text-accent text-[10px] font-space"><Wifi size={9} /> Live AR</span>
@@ -233,7 +233,7 @@ export default function ARSkyView() {
                 <p className="text-accent text-sm font-space font-semibold">Hunt Active</p>
                 <p className="text-muted-foreground text-xs">Find & tap: <span className="text-foreground">{huntTarget}</span></p>
               </div>
-              <button onClick={() => { setHuntTarget(null); localStorage.removeItem('uniquesky_active_hunt'); }} className="text-muted-foreground text-xs hover:text-foreground font-space">✕ Stop</button>
+              <button onClick={() => { setHuntTarget(null); localStorage.removeItem('youneekmeteor_active_hunt'); }} className="text-muted-foreground text-xs hover:text-foreground font-space">✕ Stop</button>
             </div>
           </motion.div>
         )}

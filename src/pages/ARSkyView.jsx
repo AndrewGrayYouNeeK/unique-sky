@@ -74,27 +74,44 @@ export default function ARSkyView() {
       .catch(() => {});
   }, []);
 
-  // Device orientation — pauses while user is dragging
+  // Device orientation — maps camera direction to sky azimuth/altitude
   useEffect(() => {
     const handleOrientation = (e) => {
-      if (isDraggingRef.current) return; // don't fight the drag
-      if (e.alpha !== null && e.alpha !== undefined) {
-        setHasMotion(true);
-        setAzimuth(((e.alpha || 0) + 360) % 360);
-        // beta: 0=flat, 90=upright facing up, 180=flat upside-down
-        const tilt = Math.max(-90, Math.min(90, 90 - (e.beta || 45)));
-        setAltitude(tilt);
-      }
+      if (isDraggingRef.current) return;
+      if (e.alpha === null || e.alpha === undefined) return;
+
+      setHasMotion(true);
+
+      const alpha = e.alpha || 0; // compass heading: 0=North, clockwise
+      const beta  = e.beta  || 0; // front-back tilt: 0=flat, 90=upright portrait
+      const gamma = e.gamma || 0; // left-right tilt: 0=upright, ±90=landscape
+
+      // When phone is held upright (portrait) pointing camera at sky:
+      // beta ~90 means camera pointing forward/up
+      // We compute the altitude of where the camera is pointing.
+      // Altitude = 90 - beta when phone is portrait upright pointing forward
+      // Clamp to [-90, 90]
+      const altitude = Math.max(-90, Math.min(90, beta - 90));
+
+      // Azimuth correction: when tilted sideways (gamma), alpha drifts.
+      // Apply a simple gamma-based correction to keep compass accurate.
+      const gammaRad = (gamma * Math.PI) / 180;
+      const azimuthCorrected = ((alpha + Math.sin(gammaRad) * 90) + 360) % 360;
+
+      setAzimuth(azimuthCorrected);
+      setAltitude(-altitude); // negative because tilting up = looking higher
     };
+
+    const addListener = () => window.addEventListener('deviceorientation', handleOrientation);
 
     if (window.DeviceOrientationEvent) {
       if (typeof DeviceOrientationEvent.requestPermission === 'function' && !motionPermAsked.current) {
         motionPermAsked.current = true;
         DeviceOrientationEvent.requestPermission()
-          .then(perm => { if (perm === 'granted') window.addEventListener('deviceorientation', handleOrientation); })
+          .then(perm => { if (perm === 'granted') addListener(); })
           .catch(() => {});
       } else {
-        window.addEventListener('deviceorientation', handleOrientation);
+        addListener();
       }
     }
     return () => window.removeEventListener('deviceorientation', handleOrientation);

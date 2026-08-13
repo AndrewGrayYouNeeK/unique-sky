@@ -1,0 +1,16 @@
+{
+  "name": "YouneeK Stars",
+  "short_name": "YouneeK Stars",
+  "description": "AR star naming, sky hunts, and celestial exploration",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#030810",
+  "theme_color": "#030810",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%23030810'/><text x='50' y='68' text-anchor='middle' font-size='60' fill='%23fbbf24'>✦</text></svg>",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

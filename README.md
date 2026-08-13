@@ -1,39 +1,65 @@
-**Welcome to your Base44 project** 
+# YouneeK Stars
 
-**About**
+An AR star-naming app with sky exploration, daily hunts, and a global star map.
 
-View and Edit  your app on [Base44.com](http://Base44.com) 
+## Features
 
-This project contains everything you need to run your app locally.
+- **AR Sky View** — Pan the night sky with touch or device orientation
+- **Name a Star** — Claim stars with symbolic ownership ($10 base / $20 premium)
+- **Daily Hunts** — Complete sky challenges and earn points
+- **Star Map** — Browse the celestial catalog with claimed stars highlighted
+- **Profile** — Track your stars, hunt progress, and leaderboard rank
 
-**Edit the code in your local development environment**
+## Prerequisites
 
-Any change pushed to the repo will also be reflected in the Base44 Builder.
+- Node.js 18+
+- npm
 
-**Prerequisites:** 
+## Setup
 
-1. Clone the repository using the project's Git URL 
-2. Navigate to the project directory
-3. Install dependencies: `npm install`
-4. Create an `.env.local` file and set the right environment variables
-
-```
-VITE_BASE44_APP_ID=your_app_id
-VITE_BASE44_APP_BASE_URL=your_backend_url
-
-e.g.
-VITE_BASE44_APP_ID=cbef744a8545c389ef439ea6
-VITE_BASE44_APP_BASE_URL=https://my-to-do-list-81bfaad7.base44.app
+```bash
+npm install
 ```
 
-Run the app: `npm run dev`
+## Development
 
-**Publish your changes**
+Run the API server and Vite dev server together:
 
-Open [Base44.com](http://Base44.com) and click on Publish.
+```bash
+npm run dev
+```
 
-**Docs & Support**
+Or run them separately:
 
-Documentation: [https://docs.base44.com/Integrations/Using-GitHub](https://docs.base44.com/Integrations/Using-GitHub)
+```bash
+npm run server   # API on http://localhost:3001
+npm run client   # Vite on http://localhost:5173
+```
 
-Support: [https://app.base44.com/support](https://app.base44.com/support)
+The Vite dev server proxies `/api` requests to the Express backend.
+
+## Environment Variables
+
+Optional — defaults work for local development:
+
+```
+VITE_API_URL=/api
+PORT=3001
+```
+
+## Build
+
+```bash
+npm run build
+npm run preview
+```
+
+For production, deploy the Express API (`server/index.js`) alongside the built static files from `dist/`.
+
+## Data Storage
+
+Star claims, purchases, and hunt completions are stored in `server/data.json`. Back up this file to preserve data across restarts.
+
+## Disclaimer
+
+Star naming in YouneeK Stars is symbolic only and is not recognized by the International Astronomical Union or any official astronomical body.

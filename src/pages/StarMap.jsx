@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Lock, Star, Crown, Globe } from 'lucide-react';
+import { Search, Lock, Globe } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { BRIGHT_STARS, getStarColorHex, magnitudeToSize } from '@/lib/starData';
+import { getNamedStars } from '@/api/apiClient';
 
 const CONSTELLATIONS = [...new Set(BRIGHT_STARS.map(s => s.constellation))];
 
@@ -10,6 +11,13 @@ export default function StarMap() {
   const [search, setSearch] = useState('');
   const [selectedConstellation, setSelectedConstellation] = useState('All');
   const [hoveredStar, setHoveredStar] = useState(null);
+  const [ownedStars, setOwnedStars] = useState([]);
+
+  useEffect(() => {
+    getNamedStars()
+      .then(stars => setOwnedStars(stars))
+      .catch(() => {});
+  }, []);
 
   const filtered = BRIGHT_STARS.filter(star => {
     const matchSearch = star.name.toLowerCase().includes(search.toLowerCase());
@@ -17,28 +25,27 @@ export default function StarMap() {
     return matchSearch && matchConst;
   });
 
-  // Map dimensions
   const W = 800;
   const H = 500;
 
-  // Project RA/Dec to flat map
   const project = (ra, dec) => {
     const x = (ra / 360) * W;
     const y = H / 2 - (dec / 90) * (H / 2);
     return { x, y };
   };
 
+  const getOwnership = (star) =>
+    ownedStars.find(s => s.hip_id === star.id || s.name?.toLowerCase() === star.name.toLowerCase());
+
   return (
     <div className="min-h-screen sky-gradient pb-24 pt-6">
-      {/* Header */}
       <div className="px-4 mb-5">
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
           <h1 className="nebula-text font-space font-bold text-3xl mb-1">Star Map</h1>
-          <p className="text-muted-foreground text-sm font-inter">Global catalog · {BRIGHT_STARS.length} stars charted</p>
+          <p className="text-muted-foreground text-sm font-inter">Global catalog · {BRIGHT_STARS.length} stars charted · {ownedStars.length} claimed</p>
         </motion.div>
       </div>
 
-      {/* Search */}
       <div className="px-4 mb-4">
         <div className="relative">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -51,7 +58,6 @@ export default function StarMap() {
         </div>
       </div>
 
-      {/* Constellation filter */}
       <div className="px-4 mb-4 flex gap-2 overflow-x-auto pb-1">
         {['All', ...CONSTELLATIONS.slice(0, 12)].map(c => (
           <button
@@ -68,7 +74,6 @@ export default function StarMap() {
         ))}
       </div>
 
-      {/* Sky map SVG */}
       <div className="px-4 mb-4">
         <div className="glass-card rounded-2xl overflow-hidden relative">
           <div className="absolute top-3 left-3 text-xs text-muted-foreground font-space z-10 flex items-center gap-1">
@@ -80,7 +85,6 @@ export default function StarMap() {
             className="w-full"
             style={{ background: 'radial-gradient(ellipse at center, #0a1225 0%, #030810 100%)' }}
           >
-            {/* Grid lines */}
             {[-60, -30, 0, 30, 60].map(dec => {
               const y = H / 2 - (dec / 90) * (H / 2);
               return (
@@ -100,32 +104,28 @@ export default function StarMap() {
               );
             })}
 
-            {/* Milky Way band */}
             <rect x={200} y={H * 0.2} width={400} height={H * 0.6} rx={80} fill="rgba(100,120,200,0.03)" />
 
-            {/* Stars */}
             {filtered.map(star => {
               const { x, y } = project(star.ra, star.dec);
               const size = magnitudeToSize(star.magnitude) * 0.7;
               const colorHex = getStarColorHex(star.color || 'white');
               const isHovered = hoveredStar?.id === star.id;
+              const ownership = getOwnership(star);
+              const isNamed = Boolean(ownership);
 
               return (
                 <g
                   key={star.id}
-                  onMouseEnter={() => setHoveredStar(star)}
+                  onMouseEnter={() => setHoveredStar({ ...star, ...ownership, is_named: isNamed, owner_name: ownership?.owner_name })}
                   onMouseLeave={() => setHoveredStar(null)}
                   style={{ cursor: 'pointer' }}
                 >
-                  {/* Glow */}
                   <circle cx={x} cy={y} r={size * 3} fill={colorHex} opacity={0.07} />
-                  {/* Star */}
-                  <circle cx={x} cy={y} r={size} fill={star.is_named ? '#fbbf24' : colorHex} opacity={0.9} />
-                  {/* Owner ring */}
-                  {star.is_named && (
+                  <circle cx={x} cy={y} r={size} fill={isNamed ? '#fbbf24' : colorHex} opacity={0.9} />
+                  {isNamed && (
                     <circle cx={x} cy={y} r={size + 3} fill="none" stroke="#fbbf24" strokeWidth={0.8} opacity={0.5} strokeDasharray="2,2" />
                   )}
-                  {/* Hover label */}
                   {(isHovered || star.magnitude < 0.5) && (
                     <text x={x + size + 3} y={y + 3} fill="rgba(200,220,255,0.8)" fontSize={9} fontFamily="Space Grotesk">
                       {star.name}
@@ -136,22 +136,23 @@ export default function StarMap() {
             })}
           </svg>
 
-          {/* Hovered star tooltip */}
           {hoveredStar && (
             <div className="absolute bottom-3 left-3 right-3 glass-dark rounded-xl p-3 flex items-center gap-3">
               <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: `${getStarColorHex(hoveredStar.color || 'white')}20` }}>
                 <div className="w-2 h-2 rounded-full" style={{ background: getStarColorHex(hoveredStar.color || 'white') }} />
               </div>
-              <div>
+              <div className="flex-1">
                 <p className="font-space font-semibold text-foreground text-sm">{hoveredStar.name}</p>
-                <p className="text-muted-foreground text-xs">{hoveredStar.constellation} · {hoveredStar.magnitude.toFixed(2)} mag · {hoveredStar.distance_ly} ly</p>
+                <p className="text-muted-foreground text-xs">
+                  {hoveredStar.constellation} · {hoveredStar.magnitude.toFixed(2)} mag · {hoveredStar.distance_ly} ly
+                  {hoveredStar.owner_name && ` · ★ ${hoveredStar.owner_name}`}
+                </p>
               </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Legend */}
       <div className="px-4">
         <div className="glass-dark rounded-xl p-4 flex items-center gap-6 flex-wrap">
           <LegendItem color="#93c5fd" label="Blue/White" />

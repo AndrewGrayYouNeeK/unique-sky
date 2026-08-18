@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Star, Lock, Crown, Filter, Sparkles } from 'lucide-react';
+import { Search, Lock, Crown, Sparkles } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import StarPurchaseModal from '@/components/purchase/StarPurchaseModal';
 import { BRIGHT_STARS, getStarColorHex } from '@/lib/starData';
-import { base44 } from '@/api/base44Client';
+import { getNamedStars } from '@/api/apiClient';
 
 const FILTERS = ['All Stars', 'Available', 'Claimed', 'Bright', 'Faint'];
 
@@ -16,7 +16,7 @@ export default function NameAStar() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    base44.entities.Star.filter({ is_named: true })
+    getNamedStars()
       .then(stars => {
         const map = {};
         stars.forEach(s => { map[s.hip_id || s.name.toLowerCase()] = { owner: s.owner_name, tier: s.ownership_tier }; });
@@ -49,9 +49,16 @@ export default function NameAStar() {
   const claimedCount = Object.keys(ownedStars).length;
   const availableCount = totalStars - claimedCount;
 
+  if (loading) {
+    return (
+      <div className="min-h-screen sky-gradient flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-star-gold/30 border-t-star-gold rounded-full animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen sky-gradient pb-24 pt-6">
-      {/* Header */}
       <div className="px-4 mb-6">
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
           <h1 className="nebula-text font-space font-bold text-3xl mb-1">Name a Star</h1>
@@ -60,7 +67,6 @@ export default function NameAStar() {
           </p>
         </motion.div>
 
-        {/* Stats bar */}
         <motion.div
           className="flex gap-3 mt-4"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }}
@@ -70,7 +76,6 @@ export default function NameAStar() {
           <StatPill label="Available" value={availableCount} color="text-accent" />
         </motion.div>
 
-        {/* Scarcity bar */}
         {claimedCount > 0 && (
           <div className="mt-3">
             <div className="flex justify-between text-xs text-muted-foreground mb-1 font-space">
@@ -89,7 +94,6 @@ export default function NameAStar() {
         )}
       </div>
 
-      {/* Search */}
       <div className="px-4 mb-4">
         <div className="relative">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -102,7 +106,6 @@ export default function NameAStar() {
         </div>
       </div>
 
-      {/* Filter chips */}
       <div className="px-4 mb-4 flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
         {FILTERS.map(f => (
           <button
@@ -119,7 +122,6 @@ export default function NameAStar() {
         ))}
       </div>
 
-      {/* Star grid */}
       <div className="px-4 space-y-2">
         {filtered.map((star, i) => {
           const ownership = getStarOwnership(star);
@@ -136,7 +138,6 @@ export default function NameAStar() {
                 ownership ? 'opacity-70 cursor-default' : 'hover:border-star-gold/30 active:scale-98'
               }`}
             >
-              {/* Star icon */}
               <div
                 className="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center"
                 style={{ background: `radial-gradient(circle, ${colorHex}30 0%, transparent 70%)`, border: `1px solid ${colorHex}40` }}
@@ -144,7 +145,6 @@ export default function NameAStar() {
                 <div className="w-3 h-3 rounded-full star-shimmer" style={{ background: colorHex, boxShadow: `0 0 8px ${colorHex}` }} />
               </div>
 
-              {/* Info */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-0.5">
                   <span className="font-space font-semibold text-foreground text-sm">{star.name}</span>
@@ -162,7 +162,6 @@ export default function NameAStar() {
                 )}
               </div>
 
-              {/* Magnitude */}
               <div className="text-right flex-shrink-0">
                 <div className="text-foreground font-space font-bold text-sm">{star.magnitude.toFixed(1)}</div>
                 <div className="text-muted-foreground text-xs">mag</div>

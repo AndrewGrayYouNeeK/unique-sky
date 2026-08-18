@@ -4,7 +4,7 @@ import { X, Star, Crown, Mic, Check, Lock, AlertCircle, WifiOff, Clock } from 'l
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { base44 } from '@/api/base44Client';
+import { claimStar } from '@/api/apiClient';
 import { getStarColorHex } from '@/lib/starData';
 
 const TIERS = [
@@ -84,12 +84,12 @@ export default function StarPurchaseModal({ star, onClose, onSuccess, isOffline 
     }
 
     try {
-      const res = await base44.functions.invoke('claimStar', claimPayload);
-      if (res.data?.success) {
+      const res = await claimStar(claimPayload);
+      if (res?.success) {
         setStep('success');
         if (onSuccess) onSuccess({ ...star, owner_name: buyerName, is_named: true, ownership_tier: selectedTier });
       } else {
-        setError(res.data?.error || 'This star has already been claimed. Please choose another.');
+        setError(res?.error || 'This star has already been claimed. Please choose another.');
       }
     } catch (err) {
       // Auto-queue on network failure

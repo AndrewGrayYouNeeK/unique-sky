@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Settings2, ChevronDown, ChevronUp, Crosshair,
-  Wifi, WifiOff, Sparkles, Target, WifiOff as OfflineIcon, Zap, Trophy
+  Crosshair,
+  Wifi, WifiOff, Target, WifiOff as OfflineIcon, Trophy
 } from 'lucide-react';
 import StarCanvas from '@/components/sky/StarCanvas';
 import StarDetailModal from '@/components/sky/StarDetailModal';
@@ -10,9 +10,7 @@ import StarPurchaseModal from '@/components/purchase/StarPurchaseModal';
 import CompassRose from '@/components/sky/CompassRose';
 import DirectionHUD from '@/components/sky/DirectionHUD';
 import AltitudeRingHUD from '@/components/sky/AltitudeRingHUD';
-import TimeSlider from '@/components/sky/TimeSlider';
-import { claimStar, getNamedStars } from '@/api/apiClient';
-import { queueClaim, setupQueueFlusher, hasPendingClaims, getQueue, removeFromQueue } from '@/lib/offlineQueue';
+import { getNamedStars } from '@/api/apiClient';
 import {
   getActiveHuntTarget,
   setActiveHuntTarget,
@@ -24,22 +22,36 @@ import {
 export default function ARSkyView() {
   const [azimuth, setAzimuth] = useState(180);
   const [altitude, setAltitude] = useState(45);
-  const [yearOffset, setYearOffset] = useState(0);
   const [selectedStar, setSelectedStar] = useState(null);
   const [purchaseStar, setPurchaseStar] = useState(null);
-  const [showTimeSlider, setShowTimeSlider] = useState(false);
-  const [showMythOverlay, setShowMythOverlay] = useState(false);
   const [ownedStars, setOwnedStars] = useState({});
   const [ownedStarDetails, setOwnedStarDetails] = useState({});
   const [hasMotion, setHasMotion] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [pendingClaims, setPendingClaims] = useState(hasPendingClaims());
   const [huntTarget, setHuntTarget] = useState(getActiveHuntTarget());
   const [huntCompleteBanner, setHuntCompleteBanner] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const isDraggingRef = useRef(false);
   const dragStart = useRef(null);
-  const motionPermAsked = useRef(false);
+  const dragMoved = useRef(false);
+  const [motionEnabled, setMotionEnabled] = useState(false);
+  const [skyLocation, setSkyLocation] = useState(null);
+  const [skyError, setSkyError] = useState('');
+  const enableDeviceSky = async () => {
+    setSkyError('');
+    const orientation = window.DeviceOrientationEvent;
+    if (!orientation) { setSkyError('Motion is unavailable. You can still drag the sky.'); return; }
+    try {
+      // iOS permission must originate from this button's user gesture.
+      if ('requestPermission' in orientation && typeof orientation.requestPermission === 'function') {
+        if (await orientation.requestPermission() !== 'granted') throw new Error('Motion permission denied. Drag the sky instead.');
+      }
+      setMotionEnabled(true);
+      navigator.geolocation?.getCurrentPosition(position => {
+        setSkyLocation({ latitude: position.coords.latitude, longitude: position.coords.longitude });
+      }, () => setSkyError('Location unavailable. Showing a catalog preview; drag to explore.'), { timeout: 10000 });
+    } catch (err) { setSkyError(err.message || 'Device sky is unavailable.'); }
+  };
 
   const loadOwnedStars = useCallback(() => {
     getNamedStars({ sort: '-ownership_date', limit: 100 })
@@ -56,7 +68,7 @@ export default function ARSkyView() {
         setOwnedStars(map);
         setOwnedStarDetails(details);
       })
-      .catch(() => {});
+      .catch(err => setSkyError(`Claims unavailable: ${err.message}`));
   }, []);
 
   useEffect(() => {
@@ -66,23 +78,6 @@ export default function ARSkyView() {
     window.addEventListener('offline', down);
     return () => { window.removeEventListener('online', up); window.removeEventListener('offline', down); };
   }, []);
-
-  useEffect(() => {
-    const cleanup = setupQueueFlusher(async (queue) => {
-      for (const claim of queue) {
-        try {
-          const res = await claimStar(claim);
-          if (res?.success) {
-            removeFromQueue(claim.id);
-            setOwnedStars(prev => ({ ...prev, [claim.star_id]: claim.buyer_name }));
-          }
-        } catch { /* leave in queue */ }
-      }
-      setPendingClaims(hasPendingClaims());
-      loadOwnedStars();
-    });
-    return cleanup;
-  }, [loadOwnedStars]);
 
   useEffect(() => {
     loadOwnedStars();
@@ -101,28 +96,19 @@ export default function ARSkyView() {
 
       const altitudeVal = Math.max(-90, Math.min(90, beta - 90));
       const gammaRad = (gamma * Math.PI) / 180;
-      const azimuthCorrected = ((alpha + Math.sin(gammaRad) * 90) + 360) % 360;
+      const heading = 'webkitCompassHeading' in e && typeof e.webkitCompassHeading === 'number' ? e.webkitCompassHeading : 360 - alpha;
+      const azimuthCorrected = ((heading + Math.sin(gammaRad) * 90) + 360) % 360;
 
       setAzimuth(azimuthCorrected);
       setAltitude(-altitudeVal);
     };
 
-    const addListener = () => window.addEventListener('deviceorientation', handleOrientation);
-
-    if (window.DeviceOrientationEvent) {
-      if (typeof DeviceOrientationEvent.requestPermission === 'function' && !motionPermAsked.current) {
-        motionPermAsked.current = true;
-        DeviceOrientationEvent.requestPermission()
-          .then(perm => { if (perm === 'granted') addListener(); })
-          .catch(() => {});
-      } else {
-        addListener();
-      }
-    }
+    if (motionEnabled) window.addEventListener('deviceorientation', handleOrientation);
     return () => window.removeEventListener('deviceorientation', handleOrientation);
-  }, []);
+  }, [motionEnabled]);
 
   const handlePointerDown = useCallback((e) => {
+    dragMoved.current = false;
     isDraggingRef.current = true;
     setIsDragging(true);
     const cx = e.clientX ?? e.touches?.[0]?.clientX;
@@ -136,6 +122,7 @@ export default function ARSkyView() {
     const cy = e.clientY ?? e.touches?.[0]?.clientY;
     const dx = cx - dragStart.current.x;
     const dy = cy - dragStart.current.y;
+    if (Math.hypot(dx, dy) > 6) dragMoved.current = true;
     setAzimuth(((dragStart.current.az - dx * 0.25) + 360) % 360);
     setAltitude(Math.min(90, Math.max(-90, dragStart.current.alt + dy * 0.18)));
   }, [isDragging]);
@@ -156,18 +143,12 @@ export default function ARSkyView() {
     loadOwnedStars();
   }, [loadOwnedStars]);
 
-  const handleOfflineClaim = useCallback((claimData) => {
-    queueClaim(claimData);
-    setOwnedStars(prev => ({ ...prev, [claimData.star_id]: claimData.buyer_name }));
-    setPendingClaims(true);
-    setPurchaseStar(null);
-  }, []);
-
   const handleStarClick = useCallback(async (star) => {
+    if (dragMoved.current) return;
     if (huntTarget && starMatchesHuntTarget(star, huntTarget)) {
       const hunt = findHuntByTargetStar(huntTarget);
       if (hunt) {
-        const result = await completeHunt(hunt.id);
+        const result = await completeHunt(hunt.id).catch(err => { setSkyError(`Hunt not saved: ${err.message}. Tap the target to retry.`); return null; });
         if (result) {
           setHuntTarget(null);
           setActiveHuntTarget(null);
@@ -199,16 +180,16 @@ export default function ARSkyView() {
         onTouchStart={handlePointerDown}
         onTouchMove={handlePointerMove}
         onTouchEnd={handlePointerUp}
-        style={{ cursor: isDragging ? 'grabbing' : 'crosshair' }}
+        onTouchCancel={handlePointerUp}
+        style={{ touchAction: 'none', cursor: isDragging ? 'grabbing' : 'crosshair' }}
       >
         <StarCanvas
+          location={skyLocation}
           azimuth={azimuth}
           altitude={altitude}
-          yearOffset={yearOffset}
           onStarClick={handleStarClick}
           ownedStars={ownedStars}
           huntTarget={huntTarget}
-          showMythOverlay={showMythOverlay}
         />
       </div>
 
@@ -222,18 +203,13 @@ export default function ARSkyView() {
             <h1 className="nebula-text font-space font-bold text-xl leading-none">YouneeK Stars</h1>
             <div className="flex items-center gap-2">
               {hasMotion ? (
-                <span className="flex items-center gap-1 text-accent text-[10px] font-space"><Wifi size={9} /> Live AR</span>
+                <span className="flex items-center gap-1 text-accent text-[10px] font-space"><Wifi size={9} /> {skyLocation ? 'Device sky · approximate' : 'Device sky · catalog preview'}</span>
               ) : (
-                <span className="flex items-center gap-1 text-muted-foreground text-[10px] font-space"><WifiOff size={9} /> Drag sky</span>
+                <span className="flex items-center gap-1 text-muted-foreground text-[10px] font-space"><WifiOff size={9} /> Drag sky · catalog preview</span>
               )}
               {!isOnline && (
                 <span className="flex items-center gap-1 text-star-gold text-[10px] font-space bg-star-gold/10 px-1.5 py-0.5 rounded border border-star-gold/30">
                   <OfflineIcon size={8} /> Offline
-                </span>
-              )}
-              {pendingClaims && (
-                <span className="flex items-center gap-1 text-secondary text-[10px] font-space bg-secondary/10 px-1.5 py-0.5 rounded border border-secondary/30">
-                  <Zap size={8} /> {getQueue().length} queued
                 </span>
               )}
             </div>
@@ -287,58 +263,8 @@ export default function ARSkyView() {
       </AnimatePresence>
 
       <div className="absolute bottom-20 left-0 right-0 z-30 px-4 space-y-3">
-        <AnimatePresence>
-          {showTimeSlider && (
-            <motion.div
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 16 }}
-            >
-              <TimeSlider yearOffset={yearOffset} onChange={setYearOffset} />
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={() => setShowTimeSlider(v => !v)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl glass-dark border text-xs font-space transition-all ${
-              showTimeSlider ? 'border-star-gold/50 text-star-gold' : 'border-border/40 text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            <Settings2 size={13} />
-            Time
-            {showTimeSlider ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
-          </button>
-
-          <button
-            onClick={() => setShowMythOverlay(v => !v)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl glass-dark border text-xs font-space transition-all ${
-              showMythOverlay ? 'border-secondary/50 text-secondary glow-purple' : 'border-border/40 text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            <Sparkles size={13} />
-            Myth AR
-          </button>
-
-          {yearOffset !== 0 && (
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              className="px-3 py-2 rounded-xl glass-dark border border-accent/30 text-accent text-xs font-space"
-            >
-              {yearOffset > 0 ? `+${yearOffset}y` : `${yearOffset}y`}
-            </motion.div>
-          )}
-          {yearOffset !== 0 && (
-            <button
-              onClick={() => setYearOffset(0)}
-              className="px-3 py-2 rounded-xl glass-dark border border-border/40 text-muted-foreground text-xs font-space hover:text-foreground transition-colors"
-            >
-              Now
-            </button>
-          )}
-        </div>
+        {skyError && <p role="alert" className="glass-dark p-3 rounded-xl text-sm">{skyError}</p>}
+        <button onClick={enableDeviceSky} className="glass-dark border border-accent/40 text-accent px-3 py-2 rounded-xl text-sm">Enable device sky</button>
       </div>
 
       {selectedStar && !purchaseStar && (
@@ -357,10 +283,8 @@ export default function ARSkyView() {
       {purchaseStar && (
         <StarPurchaseModal
           star={purchaseStar}
-          isOffline={!isOnline}
           onClose={() => setPurchaseStar(null)}
           onSuccess={handleStarClaimed}
-          onOfflineClaim={handleOfflineClaim}
         />
       )}
     </div>

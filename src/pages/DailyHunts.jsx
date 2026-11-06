@@ -7,7 +7,7 @@ import {
   getLocalHuntProgress,
   isHuntCompleted,
   getTotalPoints,
-  getPlayerName,
+  syncHuntProgress,
   setActiveHuntTarget,
 } from '@/lib/hunts';
 import { api } from '@/api/apiClient';
@@ -23,13 +23,17 @@ export default function DailyHunts() {
   const [expandedHunt, setExpandedHunt] = useState(null);
   const [progress, setProgress] = useState(getLocalHuntProgress());
   const [leaderboard, setLeaderboard] = useState([]);
+  const [error, setError] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
-    api.leaderboard()
-      .then(setLeaderboard)
-      .catch(() => setLeaderboard([]));
-  }, [progress]);
+    const load = () => Promise.all([syncHuntProgress(), api.leaderboard()])
+      .then(([next, board]) => { setProgress(next); setLeaderboard(board); setError(''); })
+      .catch(err => setError(err.message));
+    load();
+    const timer = setInterval(load, 60000);
+    return () => clearInterval(timer);
+  }, []);
 
   const startHunt = (hunt) => {
     setActiveHuntTarget(hunt.target_star);
@@ -38,30 +42,16 @@ export default function DailyHunts() {
 
   const completedCount = HUNTS.filter(h => isHuntCompleted(h.id, progress)).length;
   const totalPoints = getTotalPoints(progress);
-  const playerName = getPlayerName();
-  const playerRank = leaderboard.findIndex(e => e.name === playerName) + 1;
-
-  const displayLeaderboard = (() => {
-    const playerInBoard = leaderboard.some(e => e.name === playerName);
-    const base = [...leaderboard];
-
-    if (!playerInBoard && totalPoints > 0) {
-      base.push({ name: playerName, points: totalPoints, badges: completedCount, rank: base.length + 1, isYou: true });
-    }
-
-    return base.slice(0, 10).map((entry, i) => ({
-      ...entry,
-      rank: entry.rank || i + 1,
-      isYou: entry.name === playerName,
-    }));
-  })();
+  const playerRank = leaderboard.find(e => e.isYou)?.rank || 0;
+  const displayLeaderboard = leaderboard.slice(0, 10);
 
   return (
     <div className="min-h-screen sky-gradient pb-24 pt-6">
       <div className="px-4 mb-5">
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
           <h1 className="nebula-text font-space font-bold text-3xl mb-1">Daily Hunts</h1>
-          <p className="text-muted-foreground text-sm font-inter">Explore the sky. Complete challenges. Earn your place in the cosmos.</p>
+          <p className="text-muted-foreground text-sm font-inter">Find and tap the target stars. Challenges reset at 6 PM CST / 7 PM CDT (midnight UTC).</p>
+          {error && <p role="alert" className="text-destructive text-sm mt-2">{error}</p>}
         </motion.div>
 
         <motion.div className="flex gap-3 mt-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }}>
@@ -113,7 +103,9 @@ export default function DailyHunts() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
             >
-              <button
+              <div
+                role="button" tabIndex={0} aria-expanded={expandedHunt === hunt.id}
+                onKeyDown={e => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); setExpandedHunt(expandedHunt === hunt.id ? null : hunt.id); } }}
                 onClick={() => setExpandedHunt(expandedHunt === hunt.id ? null : hunt.id)}
                 className={`w-full glass-card rounded-xl p-4 text-left transition-all ${
                   completed ? 'opacity-60' : 'hover:border-star-gold/30'
@@ -133,8 +125,6 @@ export default function DailyHunts() {
                       <span className="text-muted-foreground text-xs flex items-center gap-1">
                         <Zap size={10} /> {hunt.points} pts
                       </span>
-                      <span className="text-muted-foreground text-xs">·</span>
-                      <span className="text-muted-foreground text-xs">{hunt.participants.toLocaleString()} hunters</span>
                     </div>
                   </div>
                   <ChevronRight size={16} className={`text-muted-foreground transition-transform ${expandedHunt === hunt.id ? 'rotate-90' : ''}`} />
@@ -164,7 +154,7 @@ export default function DailyHunts() {
                     )}
                   </motion.div>
                 )}
-              </button>
+              </div>
             </motion.div>
           );
         })}

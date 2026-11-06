@@ -1,8 +1,8 @@
+import { equatorialToHorizontal } from '@/lib/astronomy';
 import { useRef, useEffect, useCallback } from 'react';
-import { BRIGHT_STARS, PLANETS, getStarColorHex, magnitudeToSize, magnitudeToOpacity } from '@/lib/starData';
+import { BRIGHT_STARS, getStarColorHex, magnitudeToSize, magnitudeToOpacity } from '@/lib/starData';
 
-// Direct RA/Dec → screen projection
-// azimuth pans the RA axis, altitude pans the Dec axis
+// Equirectangular horizontal sky projection (catalog RA/Dec preview without location).
 function projectToScreen(ra, dec, viewAz, viewAlt, fovRad, w, h) {
   // Normalize RA difference with wrap-around
   let dRa = ra - viewAz;
@@ -21,7 +21,7 @@ function projectToScreen(ra, dec, viewAz, viewAlt, fovRad, w, h) {
 
 export default function StarCanvas({
   azimuth, altitude, fov = 80, yearOffset = 0,
-  onStarClick, ownedStars = {}, huntTarget = null, showMythOverlay = false
+  onStarClick, ownedStars = {}, huntTarget = null, showMythOverlay = false, location = null
 }) {
   const canvasRef = useRef(null);
   const animFrameRef = useRef(null);
@@ -32,8 +32,9 @@ export default function StarCanvas({
   const projectStar = useCallback((ra, dec, w, h) => {
     const precession = yearOffset * 0.013889;
     const adjustedRa = ((ra + precession) % 360 + 360) % 360;
-    return projectToScreen(adjustedRa, dec, azimuth, altitude, fovRad, w, h);
-  }, [azimuth, altitude, yearOffset, fovRad]);
+    const horizontal = location ? equatorialToHorizontal(adjustedRa, dec, location.latitude, location.longitude) : { azimuth: adjustedRa, altitude: dec };
+    return projectToScreen(horizontal.azimuth, horizontal.altitude, azimuth, altitude, fovRad, w, h);
+  }, [azimuth, altitude, yearOffset, fovRad, location]);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -237,35 +238,7 @@ export default function StarCanvas({
       ctx.restore();
     });
 
-    // ── Planets ─────────────────────────────────────────────────────
-    PLANETS.forEach((planet, i) => {
-      const angle = t * 0.04 + i * (Math.PI * 2 / PLANETS.length);
-      const px = w * 0.15 + Math.cos(angle * 0.25 + i * 1.3) * w * 0.35 + i * w * 0.08;
-      const py = h * 0.12 + Math.sin(angle * 0.18 + i) * h * 0.08;
-      if (px < -20 || px > w + 20) return;
-
-      ctx.save();
-      const pg = ctx.createRadialGradient(px, py, 0, px, py, 14);
-      pg.addColorStop(0, planet.color + 'dd');
-      pg.addColorStop(1, planet.color + '00');
-      ctx.fillStyle = pg;
-      ctx.beginPath();
-      ctx.arc(px, py, 14, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = planet.color;
-      ctx.beginPath();
-      ctx.arc(px, py, planet.size, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = 'rgba(255,220,100,0.75)';
-      ctx.font = `${planet.symbol} 8px Space Grotesk`;
-      ctx.font = '9px Space Grotesk';
-      ctx.fillText(`${planet.symbol} ${planet.name}`, px + planet.size + 4, py + 3);
-      ctx.restore();
-    });
-
-    // ── Milky Way band ──────────────────────────────────────────────
+    // ── Decorative sky glow ─────────────────────────────────────────
     ctx.save();
     const mwG = ctx.createLinearGradient(w * 0.25, 0, w * 0.75, h);
     mwG.addColorStop(0, 'rgba(100,120,180,0)');

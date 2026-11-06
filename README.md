@@ -10,55 +10,143 @@ An AR star-naming app with sky exploration, daily hunts, and a global star map.
 - **Star Map** — Browse the celestial catalog with claimed stars highlighted
 - **Profile** — Track your stars, hunt progress, and leaderboard rank
 
-## Prerequisites
+**Paid claims are not live yet.** The original Express endpoint marked purchases
+“completed” without processing a payment. This rebuild does not pretend to charge
+money. Public claims fail closed until a payment provider and verified-payment
+flow are approved and implemented. Local development has an explicitly unpaid
+demo so the claim → sky/map → profile flow can be tested. Both tiers retain the
+README prices; no certificate, narration, refund policy, or extra benefits are
+promised.
 
-- Node.js 18+
-- npm
+## Local setup
 
-## Setup
-
-```bash
-npm install
-```
-
-## Development
-
-Run the API server and Vite dev server together:
+Use **Node.js 22+** and npm. Wrangler is pinned locally; no global CLI or
+Cloudflare login/token is needed for local work.
 
 ```bash
+npm ci
+cp .dev.vars.example .dev.vars  # optional: unpaid demo claims on loopback only
 npm run dev
 ```
 
-Or run them separately:
+Open **http://localhost:5173**. `dev` builds static assets once, applies **local**
+D1 migrations, and starts Vite (HMR) plus the Worker API on port 3001. Vite proxies
+`/api` to that local Worker. Keep the same hostname (`localhost`, not a mix of
+`localhost` and `127.0.0.1`) so the browser profile cookie stays consistent.
+
+Commands for separate terminals, after `npm run build` and
+`npm run db:migrate:local`:
 
 ```bash
-npm run server   # API on http://localhost:3001
-npm run client   # Vite on http://localhost:5173
+npm run server  # Wrangler Worker + static assets, localhost:3001
+npm run client  # Vite, localhost:5173, proxies /api to port 3001
 ```
 
-The Vite dev server proxies `/api` requests to the Express backend.
+To test the **production build** with its real Worker API and SPA deep links:
 
-## Environment Variables
-
-Optional — defaults work for local development:
-
-```
-VITE_API_URL=/api
-PORT=3001
+```bash
+npm run preview  # build + local migrations + Worker/static assets on port 3001
 ```
 
-## Build
+- `.dev.vars` is ignored and never uploaded. `CLAIM_MODE=demo` enables unpaid
+  claims **only** for loopback hostnames; the same flag cannot enable them on
+  `stars.youneek.xyz` or another public host.
+- Without `.dev.vars`, claims are disabled, including locally.
+- All Wrangler development uses `--local`; no binding uses `remote: true`.
+- Local D1 state lives under `.wrangler/state/`, survives restarts and repeated
+  migrations, and must never be copied into production as customer purchases.
+- The default API URL is same-origin `/api`. `VITE_API_URL` is optional and should
+  remain same-origin; browser sessions do not support cross-origin API hosting.
+- Device orientation is opt-in with **Enable device sky** (required for iOS
+  permission gestures). Touch/mouse dragging works without motion permissions.
+  Location permission is optional and coordinates remain in the browser. Without
+  location the sky is a labeled catalog preview. With location it uses approximate
+  sidereal/horizontal coordinates, not navigation-grade alignment. HTTPS is needed
+  for device/location APIs outside localhost; test on a real phone before launch.
+
+## Cloudflare architecture (prepared, not deployed)
+
+Target URL: **https://stars.youneek.xyz**
+Account: `d74b0de637f4d9d9eb3efb9e13142784`
+Proposed Worker: `youneek-stars`
+
+- Vite builds the React app into `dist/`.
+- `worker/index.ts` replaces `server/index.js` and implements the `/api` routes
+  without Express, CORS middleware, Node filesystem writes, or a separate host.
+- Workers static assets serve `dist/`. SPA fallback supports `/name-a-star`,
+  `/hunts`, `/star-map`, and `/profile` on refresh. `/api` and `/api/*` run the
+  Worker first, so an unknown API path returns JSON 404, not the SPA HTML.
+- D1 binding **`STARS_DB`** stores players, unique claims, purchases, and daily
+  hunt completions. Migration: `migrations/0001_initial.sql`.
+- A unique star primary key and a transactional D1 batch make claim + purchase
+  atomic. Conflicting concurrent claims return 409. Catalog coordinates,
+  permitted tiers, prices, hunt IDs, and points come from server-controlled data;
+  client-supplied prices or points are ignored.
+- `server/data.json` is retained as the original empty archival seed. It has no
+  claims/purchases/completions to import in this checkout. It is **not** used as a
+  writable database or exposed as a static asset. If a separate production copy
+  contains records, back it up and review a one-time D1 import and identity mapping
+  before launch; do not silently overwrite it or import demo purchases as paid.
+- Public star responses contain catalog data and dedication names, not emails,
+  private profile identifiers, or purchase records. No email is collected.
+- The profile is identified by a random HttpOnly, SameSite browser cookie (Secure
+  on HTTPS). Display names are not credentials; matching names cannot see one
+  another's claims. Clearing cookies loses access to that browser's profile;
+  cross-device accounts/recovery are not implemented or promised.
+- Hunts are self-reported by tapping the target, not sensor-verified. Each challenge
+  awards points once per browser profile per day. The shared reset is midnight UTC
+  (**6 PM CST / 7 PM CDT**); profile totals/rank are all-time and progress is today's.
+  Server uniqueness prevents replayed requests from increasing scores. A failed
+  completion shows an error and does not silently award local-only points.
+
+### Before any deployment — requires Andrew's approval
+
+1. Review/approve the code PR. Nothing here merges or deploys automatically.
+2. Create a D1 database named `youneek-stars` in the account above, and replace
+   the all-zero `database_id` placeholder in `wrangler.jsonc`. Bind it as
+   `STARS_DB`. No database has been provisioned by this change. The placeholder
+   is deliberate, not an invitation to let Wrangler auto-provision resources.
+3. Approve applying `migrations/0001_initial.sql` to that new database. Back up
+   and explicitly plan any existing-data import first.
+4. Approve attaching **only `stars.youneek.xyz`** as a Worker Custom Domain.
+   No routes/domain bindings are configured yet, so merely reviewing the config
+   cannot change DNS. After approval add
+   `"routes": [{ "pattern": "stars.youneek.xyz", "custom_domain": true }]`
+   to this Worker's config. Do not edit the youneek.xyz apex, youneek.dev, or other sites.
+5. Keep `CLAIM_MODE=disabled` publicly until a real payment provider, its secrets,
+   signature-verified webhook, idempotency, and fulfillment/refund behavior are
+   implemented and reviewed. No payment secrets are required or used by this PR.
+   This is a launch blocker for accepting paid claims, not a working checkout.
+6. Build and validate, then separately approve deployment with this repo's pinned
+   Wrangler. A later deploy can use `CLOUDFLARE_API_TOKEN` from the environment;
+   never print or commit it. Worker logs and traces are enabled without recording
+   request bodies, cookies, payment details, or secrets.
+
+This branch deliberately has **no deployment script, CI deploy hook, or live domain
+route**. Workers development subdomains and preview URLs are disabled. No remote
+D1 command, deployment, or DNS change is needed for development/tests.
+
+References: [Worker static assets](https://developers.cloudflare.com/workers/static-assets/),
+[D1 transactions/batches](https://developers.cloudflare.com/d1/worker-api/d1-database/#batch),
+[Custom Domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/).
+
+## Checks
 
 ```bash
 npm run build
-npm run preview
+npm run typecheck  # checks React pages and generates/checks Worker binding types
+npm run lint
+npm test           # local workerd/D1 integration + server-render smoke tests
+npm run smoke:http # with preview/dev running: real static-assets/API/deep-link checks
 ```
 
-For production, deploy the Express API (`server/index.js`) alongside the built static files from `dist/`.
-
-## Data Storage
-
-Star claims, purchases, and hunt completions are stored in `server/data.json`. Back up this file to preserve data across restarts.
+The API tests cover catalog/hunt coverage, cookie privacy, API routing, validation,
+server-authoritative pricing/points, concurrent claims, daily replay protection,
+profile isolation, public claim gating, and database persistence across restarts. Route-render tests also cover all five
+pages and the not-found route. These are not visual browser tests: real-phone
+orientation/permission behavior and a visual/accessibility pass remain pre-launch
+checks. Unused template dependencies were removed and the remaining dependencies
+were patched; `npm audit` is clean.
 
 ## Disclaimer
 

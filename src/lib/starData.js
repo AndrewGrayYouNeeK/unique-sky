@@ -1,5 +1,6 @@
 // Real bright stars catalog (Hipparcos-based subset)
 export const BRIGHT_STARS = [
+  { id: 'pleiades', name: 'Pleiades', constellation: 'Taurus', ra: 56.75, dec: 24.12, magnitude: 1.6, distance_ly: 444, spectral: 'B', color: 'blue', myth: 'The Seven Sisters: an open star cluster in Taurus. This marker represents the cluster center.' },
   { id: 'sirius', name: 'Sirius', constellation: 'Canis Major', ra: 101.29, dec: -16.72, magnitude: -1.46, distance_ly: 8.6, spectral: 'A1V', color: 'blue', myth: 'The Dog Star, brightest in the night sky. Ancient Egyptians used its heliacal rising to predict the Nile flood. Greeks called it Seirios, meaning "glowing" or "scorching".' },
   { id: 'canopus', name: 'Canopus', constellation: 'Carina', ra: 95.99, dec: -52.70, magnitude: -0.74, distance_ly: 310, spectral: 'F0Ib', color: 'yellow', myth: 'Navigator of the ancient world. Used by spacecraft as a navigational reference. Named after the chief pilot of the Greek king Menelaus.' },
   { id: 'arcturus', name: 'Arcturus', constellation: 'Boötes', ra: 213.92, dec: 19.18, magnitude: -0.05, distance_ly: 37, spectral: 'K0IIIp', color: 'orange', myth: 'Guardian of the Bear. Its light that opened the 1933 World\'s Fair in Chicago was 40 years old when it arrived—having left the star in 1893, the year of the previous World\'s Fair.' },

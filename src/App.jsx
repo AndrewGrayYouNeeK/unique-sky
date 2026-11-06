@@ -12,7 +12,7 @@ import DailyHunts from './pages/DailyHunts';
 import StarMap from './pages/StarMap';
 import Profile from './pages/Profile';
 
-function AppRoutes() {
+export function AppRoutes() {
   return (
     <Routes>
       <Route element={<AppLayout />}>

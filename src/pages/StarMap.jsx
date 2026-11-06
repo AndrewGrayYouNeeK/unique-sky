@@ -9,6 +9,7 @@ const CONSTELLATIONS = [...new Set(BRIGHT_STARS.map(s => s.constellation))];
 
 export default function StarMap() {
   const [search, setSearch] = useState('');
+  const [error, setError] = useState('');
   const [selectedConstellation, setSelectedConstellation] = useState('All');
   const [hoveredStar, setHoveredStar] = useState(null);
   const [ownedStars, setOwnedStars] = useState([]);
@@ -16,11 +17,11 @@ export default function StarMap() {
   useEffect(() => {
     getNamedStars()
       .then(stars => setOwnedStars(stars))
-      .catch(() => {});
+      .catch(err => setError(err.message));
   }, []);
 
   const filtered = BRIGHT_STARS.filter(star => {
-    const matchSearch = star.name.toLowerCase().includes(search.toLowerCase());
+    const matchSearch = `${star.name} ${star.constellation}`.toLowerCase().includes(search.toLowerCase());
     const matchConst = selectedConstellation === 'All' || star.constellation === selectedConstellation;
     return matchSearch && matchConst;
   });
@@ -41,6 +42,7 @@ export default function StarMap() {
     <div className="min-h-screen sky-gradient pb-24 pt-6">
       <div className="px-4 mb-5">
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
+          {error && <p role="alert" className="text-destructive mb-3">Claims unavailable: {error}</p>}
           <h1 className="nebula-text font-space font-bold text-3xl mb-1">Star Map</h1>
           <p className="text-muted-foreground text-sm font-inter">Global catalog · {BRIGHT_STARS.length} stars charted · {ownedStars.length} claimed</p>
         </motion.div>
@@ -59,7 +61,7 @@ export default function StarMap() {
       </div>
 
       <div className="px-4 mb-4 flex gap-2 overflow-x-auto pb-1">
-        {['All', ...CONSTELLATIONS.slice(0, 12)].map(c => (
+        {['All', ...CONSTELLATIONS].map(c => (
           <button
             key={c}
             onClick={() => setSelectedConstellation(c)}
@@ -99,7 +101,7 @@ export default function StarMap() {
               return (
                 <g key={ra}>
                   <line x1={x} y1={0} x2={x} y2={H} stroke="rgba(100,120,200,0.08)" strokeWidth={0.5} />
-                  <text x={x + 2} y={H - 4} fill="rgba(100,130,200,0.4)" fontSize={8} fontFamily="Space Grotesk">{ra}h</text>
+                  <text x={x + 2} y={H - 4} fill="rgba(100,130,200,0.4)" fontSize={8} fontFamily="Space Grotesk">{ra / 15}h</text>
                 </g>
               );
             })}
@@ -117,10 +119,15 @@ export default function StarMap() {
               return (
                 <g
                   key={star.id}
+                  role="button" tabIndex={0} aria-label={star.name}
+                  onClick={() => setHoveredStar({ ...star, ...ownership, is_named: isNamed, owner_name: ownership?.owner_name })}
+                  onFocus={() => setHoveredStar({ ...star, ...ownership, is_named: isNamed, owner_name: ownership?.owner_name })}
+                  onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setHoveredStar({ ...star, ...ownership, is_named: isNamed, owner_name: ownership?.owner_name }); } }}
                   onMouseEnter={() => setHoveredStar({ ...star, ...ownership, is_named: isNamed, owner_name: ownership?.owner_name })}
                   onMouseLeave={() => setHoveredStar(null)}
                   style={{ cursor: 'pointer' }}
                 >
+                  <circle cx={x} cy={y} r={Math.max(size * 3, 12)} fill="transparent" />
                   <circle cx={x} cy={y} r={size * 3} fill={colorHex} opacity={0.07} />
                   <circle cx={x} cy={y} r={size} fill={isNamed ? '#fbbf24' : colorHex} opacity={0.9} />
                   {isNamed && (

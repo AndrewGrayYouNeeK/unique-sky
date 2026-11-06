@@ -10,6 +10,7 @@ const FILTERS = ['All Stars', 'Available', 'Claimed', 'Bright', 'Faint'];
 
 export default function NameAStar() {
   const [search, setSearch] = useState('');
+  const [error, setError] = useState('');
   const [filter, setFilter] = useState('All Stars');
   const [selectedStar, setSelectedStar] = useState(null);
   const [ownedStars, setOwnedStars] = useState({});
@@ -22,7 +23,7 @@ export default function NameAStar() {
         stars.forEach(s => { map[s.hip_id || s.name.toLowerCase()] = { owner: s.owner_name, tier: s.ownership_tier }; });
         setOwnedStars(map);
       })
-      .catch(() => {})
+      .catch(err => setError(err.message))
       .finally(() => setLoading(false));
   }, []);
 
@@ -61,9 +62,10 @@ export default function NameAStar() {
     <div className="min-h-screen sky-gradient pb-24 pt-6">
       <div className="px-4 mb-6">
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
+          {error && <p role="alert" className="text-destructive mb-3">Claims unavailable: {error}</p>}
           <h1 className="nebula-text font-space font-bold text-3xl mb-1">Name a Star</h1>
           <p className="text-muted-foreground text-sm font-inter">
-            Claim a star — your name appears in AR for everyone, forever.
+            Symbolic star naming · $10 base / $20 premium. Paid claims are not yet enabled.
           </p>
         </motion.div>
 
@@ -133,6 +135,7 @@ export default function NameAStar() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.02 }}
+              disabled={Boolean(error)}
               onClick={() => !ownership && setSelectedStar(star)}
               className={`w-full glass-card rounded-xl p-4 flex items-center gap-4 text-left transition-all ${
                 ownership ? 'opacity-70 cursor-default' : 'hover:border-star-gold/30 active:scale-98'

@@ -1,0 +1,2 @@
+# Local loopback-only unpaid demo. Never uploaded to Cloudflare.
+CLAIM_MODE=demo

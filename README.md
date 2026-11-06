@@ -50,7 +50,7 @@ npm run preview  # build + local migrations + Worker/static assets on port 3001
 
 - `.dev.vars` is ignored and never uploaded. `CLAIM_MODE=demo` enables unpaid
   claims **only** for loopback hostnames; the same flag cannot enable them on
-  `stars.youneek.dev` or another public host.
+  `stars.youneek.xyz` or another public host.
 - Without `.dev.vars`, claims are disabled, including locally.
 - All Wrangler development uses `--local`; no binding uses `remote: true`.
 - Local D1 state lives under `.wrangler/state/`, survives restarts and repeated
@@ -66,7 +66,7 @@ npm run preview  # build + local migrations + Worker/static assets on port 3001
 
 ## Cloudflare architecture (prepared, not deployed)
 
-Target URL: **https://stars.youneek.dev**
+Target URL: **https://stars.youneek.xyz**
 Account: `d74b0de637f4d9d9eb3efb9e13142784`
 Proposed Worker: `youneek-stars`
 
@@ -108,11 +108,11 @@ Proposed Worker: `youneek-stars`
    is deliberate, not an invitation to let Wrangler auto-provision resources.
 3. Approve applying `migrations/0001_initial.sql` to that new database. Back up
    and explicitly plan any existing-data import first.
-4. Approve attaching **only `stars.youneek.dev`** as a Worker Custom Domain.
+4. Approve attaching **only `stars.youneek.xyz`** as a Worker Custom Domain.
    No routes/domain bindings are configured yet, so merely reviewing the config
    cannot change DNS. After approval add
-   `"routes": [{ "pattern": "stars.youneek.dev", "custom_domain": true }]`
-   to this Worker's config. Do not edit `youneek.dev`, `youneek.xyz`, or other sites.
+   `"routes": [{ "pattern": "stars.youneek.xyz", "custom_domain": true }]`
+   to this Worker's config. Do not edit the youneek.xyz apex, youneek.dev, or other sites.
 5. Keep `CLAIM_MODE=disabled` publicly until a real payment provider, its secrets,
    signature-verified webhook, idempotency, and fulfillment/refund behavior are
    implemented and reviewed. No payment secrets are required or used by this PR.

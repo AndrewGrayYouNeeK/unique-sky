@@ -59,7 +59,7 @@ test('health, private cookie, catalog, static fallback and JSON API 404', async 
   assert.equal(await (await mf.dispatchFetch('http://localhost/profile')).text(), 'static asset');
 });
 test('public host cannot enable unpaid claims even with demo env', async () => {
-  const request = client('stars.youneek.dev');
+  const request = client('stars.youneek.xyz');
   assert.equal((await request('/api/config')).data.claimMode, 'disabled');
   assert.equal((await request('/api/stars/claim', { star_id: 'sirius', buyer_name: 'Visitor', tier: 'base' })).status, 503);
 });

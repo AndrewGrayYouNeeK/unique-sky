@@ -6,7 +6,7 @@
   "compatibility_date": "2026-11-06",
   "workers_dev": false,
   "preview_urls": false,
-  // stars.youneek.dev is intentionally NOT attached here. Andrew must approve
+  // stars.youneek.xyz is intentionally NOT attached here. Andrew must approve
   // the custom-domain/DNS change separately before adding a route or deploying.
   "assets": {
     "directory": "./dist",

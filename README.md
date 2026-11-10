@@ -11,13 +11,88 @@ An AR star-naming app with sky exploration, daily hunts, and a global star map.
 - **Star Map** — Browse the celestial catalog with claimed stars highlighted
 - **Profile** — Track your stars, hunt progress, and leaderboard rank
 
-**Paid claims are not live yet.** The original Express endpoint marked purchases
-“completed” without processing a payment. This rebuild does not pretend to charge
-money. Public claims fail closed until a payment provider and verified-payment
-flow are approved and implemented. Local development has an explicitly unpaid
-demo so the claim → sky/map → profile flow can be tested. Both tiers retain the
-README prices; no certificate, narration, refund policy, or extra benefits are
-promised.
+**Paid claims are not live yet (launch blocker).** Naming is built as a
+website-only Stripe Checkout flow (never Apple in-app purchase), but production
+stays `CLAIM_MODE=disabled` until Andrew has tested it end to end in Stripe
+**test mode** and audited the webhook, idempotency and refund behavior. Local
+development keeps an explicitly unpaid loopback-only demo. Both tiers keep the
+README prices ($10 base / $20 premium); no certificate, narration or extra
+benefits are promised.
+
+## Star naming rules
+
+- Claims are keyed on a **stable scientific star ID**, stored as opaque text and
+  enforced by `claims.star_key PRIMARY KEY` (one owner per star, globally):
+  `gaia:<Gaia DR3 source_id>` preferred, else `hip:<n>`, else `hd:<n>`
+  (`src/lib/starKey.js`). The built-in bright stars use `hip:` keys
+  (`src/lib/brightStarKeys.js`). Planets and the Pleiades cluster marker have no
+  stable star ID and cannot be named.
+- The real catalog name always comes from the server catalog, is shown first and
+  never changes. The buyer only adds an edition name (and, for Premium, a short
+  story). UI format: **Sirius ★ Named by Alex – “Forever”**.
+- The “Name this star” button only appears for free stars and opens
+  `https://stars.youneek.xyz/claim?star=<key>` (the system browser when wrapped in
+  an app).
+- Everyone sees the same claims: the API is `Cache-Control: no-store`, and the
+  sky, map and list refresh every 30 s and when the app regains focus.
+- Name/story input is trimmed, control/bidi characters are stripped, length is
+  limited (40 / 500), and links, emails and a basic list of slurs/obscenities are
+  rejected (`src/lib/dedication.js`, enforced server-side).
+
+## Checkout flow (Stripe, test mode first)
+
+1. `/claim?star=hip:32349` shows the real name, availability, tier, edition name,
+   optional story and the disclaimer, then `POST /api/checkout`.
+2. `POST /api/checkout` works only when `CLAIM_MODE=stripe` **and** both Stripe
+   secrets exist; otherwise it returns 503 and nothing is charged. It checks the
+   star is unclaimed, writes a 35-minute `reservations` hold (a partial unique
+   index allows one pending hold per star, so two buyers cannot both pay) and
+   creates a Stripe Checkout Session over the REST API with server-side prices,
+   metadata `{app, star_key, star_id, reservation_id}` and a 31-minute expiry
+   (always before the hold ends). The disclaimer appears in the line-item
+   description and on the pay button text.
+3. `POST /api/stripe/webhook` verifies `Stripe-Signature` (HMAC-SHA256 with Web
+   Crypto, constant-time compare, 5-minute tolerance), skips event ids already in
+   `processed_events`, and handles:
+   - `checkout.session.completed` / `async_payment_succeeded` with
+     `payment_status=paid`: atomically inserts the claim (`ON CONFLICT(star_key)`;
+     only a refunded row may be replaced). If someone else got the star first, or
+     the amount/currency do not match, the payment is refunded through the Stripe
+     API with a fixed idempotency key and recorded on the reservation.
+   - `checkout.session.expired`: releases the hold.
+   - `charge.refunded`: see refund policy.
+   Sessions from other products on the same Stripe account (no
+   `metadata.app=youneek-stars`) are ignored. Failures return 5xx and are not
+   marked processed, so Stripe retries. Webhooks keep working even after
+   `CLAIM_MODE` is switched back to `disabled`, so money already taken is always
+   fulfilled or refunded.
+4. `/claim/success?session_id=…` polls `GET /api/claims/session/:id` until the
+   webhook has written the claim (the redirect itself is never trusted).
+
+**Refund policy.** A full refund sets `claims.status='refunded'` and
+`refunded_at`; the row is never deleted, it disappears from public views and the
+star becomes available again (the `reservations` ledger keeps the original
+dedication). A partial refund keeps the name and only records the amount.
+
+The unpaid `POST /api/stars/claim` demo still works only on loopback with
+`CLAIM_MODE=demo`; it returns 503 on any public host in every mode.
+
+### Go-live checklist (Andrew)
+
+1. Review/merge the PR. Approve and apply migration 0002:
+   `npx wrangler d1 migrations apply youneek-stars --remote` (maps any existing
+   claim slugs to stable keys, keeps `legacy_star_id`, deletes nothing).
+2. In Stripe **test mode**, copy the test secret key (`sk_test_…`) and add a webhook
+   endpoint `https://stars.youneek.xyz/api/stripe/webhook` for
+   `checkout.session.completed`, `checkout.session.async_payment_succeeded`,
+   `checkout.session.expired` and `charge.refunded`; copy its signing secret.
+3. `npx wrangler secret put STRIPE_SECRET_KEY` and
+   `npx wrangler secret put STRIPE_WEBHOOK_SECRET` (never commit or print them).
+4. Change `CLAIM_MODE` to `"stripe"` in `wrangler.jsonc` via a PR, deploy from
+   `main`, and test with Stripe test cards: success, cancel, expired session,
+   duplicate webhook delivery, two buyers on one star, full and partial refunds.
+5. Only after that audit, swap in live keys and a live-mode webhook secret.
+   Until then this remains a launch blocker.
 
 ## Local setup
 
@@ -77,8 +152,10 @@ Proposed Worker: `youneek-stars`
 - Workers static assets serve `dist/`. SPA fallback supports `/name-a-star`,
   `/hunts`, `/star-map`, and `/profile` on refresh. `/api` and `/api/*` run the
   Worker first, so an unknown API path returns JSON 404, not the SPA HTML.
-- D1 binding **`STARS_DB`** stores players, unique claims, purchases, and daily
-  hunt completions. Migration: `migrations/0001_initial.sql`.
+- D1 binding **`STARS_DB`** stores players, unique claims, demo purchases, checkout
+  reservations, processed Stripe events and daily hunt completions. Migrations:
+  `0001_initial.sql`, `0002_stable_keys_and_checkout.sql` (0002 not yet applied
+  remotely).
 - A unique star primary key and a transactional D1 batch make claim + purchase
   atomic. Conflicting concurrent claims return 409. Catalog coordinates,
   permitted tiers, prices, hunt IDs, and points come from server-controlled data;
@@ -110,10 +187,8 @@ Andrew approved the first deployment on Nov 10, 2026:
    `npx wrangler d1 migrations apply youneek-stars --remote`.
 3. **Only `stars.youneek.xyz`** is attached as a Worker Custom Domain. Do not edit
    the youneek.xyz apex, youneek.dev, or other sites.
-4. Keep `CLAIM_MODE=disabled` publicly until a real payment provider, its secrets,
-   signature-verified webhook, idempotency, and fulfillment/refund behavior are
-   implemented and reviewed. This is a launch blocker for accepting paid claims,
-   not a working checkout.
+4. Keep `CLAIM_MODE=disabled` publicly until the go-live checklist above is done
+   in Stripe test mode and audited. This is a launch blocker for paid claims.
 5. Deploy only from GitHub `main`: `npm run build && npx wrangler deploy`, with
    `CLOUDFLARE_API_TOKEN` from the environment; never print or commit it. Worker
    logs and traces are enabled without recording request bodies, cookies, payment
@@ -203,4 +278,4 @@ were patched; `npm audit` is clean.
 
 ## Disclaimer
 
-Star naming in YouneeK Stars is symbolic only and is not recognized by the International Astronomical Union or any official astronomical body.
+Star naming is symbolic only and is not recognized by the IAU or any official astronomical body.

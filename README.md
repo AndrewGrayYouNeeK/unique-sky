@@ -270,7 +270,7 @@ npm run smoke:http # with preview/dev running: real static-assets/API/deep-link 
 
 The API tests cover catalog/hunt coverage, cookie privacy, API routing, validation,
 server-authoritative pricing/points, concurrent claims, daily replay protection,
-profile isolation, public claim gating, and database persistence across restarts. Route-render tests also cover all five
+profile isolation, public claim gating, and database persistence across restarts. `tests/checkout.test.mjs` covers the Stripe flow with a mocked Stripe API: webhook signatures, idempotency, reservation races, refunds, disabled mode and the 0002 migration. Route-render tests also cover all five
 pages and the not-found route. These are not visual browser tests: real-phone
 orientation/permission behavior and a visual/accessibility pass remain pre-launch
 checks. Unused template dependencies were removed and the remaining dependencies

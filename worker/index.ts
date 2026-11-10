@@ -1,6 +1,5 @@
 import { BRIGHT_STARS } from '../src/lib/starData.js';
 import { HUNTS } from '../src/lib/huntCatalog.js';
-
 import { brightStarKey, isClaimableStarKey as isStarKey } from '../src/lib/brightStarKeys.js';
 import { DISCLAIMER, TIERS, validateDedication } from '../src/lib/dedication.js';
 import { StripeError, stripePost, verifyStripeSignature } from './stripe';

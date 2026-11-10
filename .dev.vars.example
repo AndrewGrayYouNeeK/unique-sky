@@ -1,2 +1,6 @@
 # Local loopback-only unpaid demo. Never uploaded to Cloudflare.
 CLAIM_MODE=demo
+# Optional local Stripe TEST-mode checkout (use with `stripe listen --forward-to`):
+# CLAIM_MODE=stripe
+# STRIPE_SECRET_KEY=sk_test_...
+# STRIPE_WEBHOOK_SECRET=whsec_...

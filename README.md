@@ -99,32 +99,27 @@ Proposed Worker: `youneek-stars`
   Server uniqueness prevents replayed requests from increasing scores. A failed
   completion shows an error and does not silently award local-only points.
 
-### Before any deployment — requires Andrew's approval
+### Deployment status
 
-1. Review/approve the code PR. Nothing here merges or deploys automatically.
-2. Create a D1 database named `youneek-stars` in the account above, and replace
-   the all-zero `database_id` placeholder in `wrangler.jsonc`. Bind it as
-   `STARS_DB`. No database has been provisioned by this change. The placeholder
-   is deliberate, not an invitation to let Wrangler auto-provision resources.
-3. Approve applying `migrations/0001_initial.sql` to that new database. Back up
-   and explicitly plan any existing-data import first.
-4. Approve attaching **only `stars.youneek.xyz`** as a Worker Custom Domain.
-   No routes/domain bindings are configured yet, so merely reviewing the config
-   cannot change DNS. After approval add
-   `"routes": [{ "pattern": "stars.youneek.xyz", "custom_domain": true }]`
-   to this Worker's config. Do not edit the youneek.xyz apex, youneek.dev, or other sites.
-5. Keep `CLAIM_MODE=disabled` publicly until a real payment provider, its secrets,
+Andrew approved the first deployment on Nov 10, 2026:
+
+1. The D1 database `youneek-stars` (`7f15abe2-47ab-4788-9239-7020ddc1bd7f`) is created
+   in the account above and bound as `STARS_DB` in `wrangler.jsonc`.
+2. `migrations/0001_initial.sql` is applied with
+   `npx wrangler d1 migrations apply youneek-stars --remote`.
+3. **Only `stars.youneek.xyz`** is attached as a Worker Custom Domain. Do not edit
+   the youneek.xyz apex, youneek.dev, or other sites.
+4. Keep `CLAIM_MODE=disabled` publicly until a real payment provider, its secrets,
    signature-verified webhook, idempotency, and fulfillment/refund behavior are
-   implemented and reviewed. No payment secrets are required or used by this PR.
-   This is a launch blocker for accepting paid claims, not a working checkout.
-6. Build and validate, then separately approve deployment with this repo's pinned
-   Wrangler. A later deploy can use `CLOUDFLARE_API_TOKEN` from the environment;
-   never print or commit it. Worker logs and traces are enabled without recording
-   request bodies, cookies, payment details, or secrets.
+   implemented and reviewed. This is a launch blocker for accepting paid claims,
+   not a working checkout.
+5. Deploy only from GitHub `main`: `npm run build && npx wrangler deploy`, with
+   `CLOUDFLARE_API_TOKEN` from the environment; never print or commit it. Worker
+   logs and traces are enabled without recording request bodies, cookies, payment
+   details, or secrets.
 
-This branch deliberately has **no deployment script, CI deploy hook, or live domain
-route**. Workers development subdomains and preview URLs are disabled. No remote
-D1 command, deployment, or DNS change is needed for development/tests.
+There is no CI deploy hook. Workers development subdomains and preview URLs are
+disabled. New migrations or domain changes need Andrew's approval first.
 
 References: [Worker static assets](https://developers.cloudflare.com/workers/static-assets/),
 [D1 transactions/batches](https://developers.cloudflare.com/d1/worker-api/d1-database/#batch),

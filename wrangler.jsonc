@@ -6,8 +6,9 @@
   "compatibility_date": "2026-11-06",
   "workers_dev": false,
   "preview_urls": false,
-  // stars.youneek.xyz is intentionally NOT attached here. Andrew must approve
-  // the custom-domain/DNS change separately before adding a route or deploying.
+  // Andrew approved attaching only stars.youneek.xyz as this Worker's Custom
+  // Domain (Nov 10, 2026). Do not add other hostnames, the youneek.xyz apex, or youneek.dev.
+  "routes": [{ "pattern": "stars.youneek.xyz", "custom_domain": true }],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
@@ -17,7 +18,7 @@
   "d1_databases": [{
     "binding": "STARS_DB",
     "database_name": "youneek-stars",
-    "database_id": "00000000-0000-0000-0000-000000000000",
+    "database_id": "7f15abe2-47ab-4788-9239-7020ddc1bd7f",
     "migrations_dir": "migrations"
   }],
   "vars": { "CLAIM_MODE": "disabled" },

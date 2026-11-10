@@ -149,3 +149,19 @@ test('label placement avoids overlaps and keeps priority order', () => {
   ]);
   assert.deepEqual(placed.map(p => p.text), ['owned', 'far']);
 });
+
+test('loader: tiled tiers can come from a separate base URL (future R2/CDN)', async () => {
+  const calls = [];
+  const fetchImpl = async url => {
+    calls.push(url);
+    const local = url.replace('https://tiles.example/', '/catalog/');
+    const body = await readFile(`public${local}`, 'utf8');
+    return { ok: true, status: 200, json: async () => JSON.parse(body) };
+  };
+  const loader = createCatalogLoader({ baseUrl: '/catalog/', tileBaseUrl: 'https://tiles.example/', fetchImpl });
+  await loader.loadTier0();
+  await loader.ensureView({ ra: 56.75, dec: 24.12, radius: 5, limit: 7 });
+  assert.ok(calls.some(u => u === '/catalog/hyg41/t0.json'));
+  assert.ok(calls.filter(u => u.includes('/t1/')).every(u => u.startsWith('https://tiles.example/hyg41/t1/')));
+  assert.ok(calls.some(u => u.includes('/t1/')));
+});

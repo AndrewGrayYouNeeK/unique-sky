@@ -22,7 +22,11 @@ const CURATED_HIP = new Set(Object.values(LEGACY_STAR_IDS).map(ids => ids.hip).f
 
 let sharedLoader = null;
 export function getSharedCatalogLoader() {
-  if (!sharedLoader) sharedLoader = createCatalogLoader({ baseUrl: '/catalog/' });
+  if (!sharedLoader) {
+    // VITE_CATALOG_TILE_BASE_URL (build-time) can point Tier 1+ tiles at another origin, e.g. R2.
+    const tileBaseUrl = import.meta.env?.VITE_CATALOG_TILE_BASE_URL || null;
+    sharedLoader = createCatalogLoader({ baseUrl: '/catalog/', tileBaseUrl });
+  }
   return sharedLoader;
 }
 

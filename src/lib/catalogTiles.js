@@ -99,7 +99,10 @@ export function decodeColumnar(file, scale, nullCi = -999) {
   };
 }
 
-export function createCatalogLoader({ baseUrl = '/catalog/', fetchImpl = (url) => globalThis.fetch(url) } = {}) {
+// baseUrl: where manifest.json + Tier 0 live (bundled with the app's static assets).
+// tileBaseUrl: optional override for tiled tiers (e.g. a future R2 bucket / CDN origin);
+// a tier's own "baseUrl" in the manifest wins over both.
+export function createCatalogLoader({ baseUrl = '/catalog/', tileBaseUrl = null, fetchImpl = (url) => globalThis.fetch(url) } = {}) {
   let manifest = null;
   let tier0 = null;
   const tiles = new Map();      // `${tier}/${bin}/${tile}` -> decoded tile
@@ -111,7 +114,7 @@ export function createCatalogLoader({ baseUrl = '/catalog/', fetchImpl = (url) =
     if (!res.ok) throw new Error(`catalog ${url}: HTTP ${res.status}`);
     return res.json();
   };
-  const tierBase = tier => tier.baseUrl || baseUrl;
+  const tierBase = tier => tier.baseUrl || (tier.kind === 'tiled' && tileBaseUrl) || baseUrl;
 
   let manifestPromise = null;
   function loadManifest() {

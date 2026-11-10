@@ -79,7 +79,10 @@ export function displayNames(star = {}, claim = null) {
     || (star.hip ? `HIP ${star.hip}` : star.hd ? `HD ${star.hd}` : 'Unnamed star');
   return { real, edition: claim?.edition_name || claim?.owner_name || null };
 }
+<<<<<<< HEAD
 
 // Claimable keys for website checkout (gaia|hip|hd only). Wider catalog keys still exist above.
 const CLAIMABLE_KEY_PATTERN = /^(gaia|hip|hd):[1-9][0-9]{0,19}$/;
 export const isStarKey = value => typeof value === 'string' && CLAIMABLE_KEY_PATTERN.test(value);
+=======
+>>>>>>> 442ed65 (Share starKey.js verbatim with feat/ar-zoom-density; claim keys limited to gaia/hip/hd)

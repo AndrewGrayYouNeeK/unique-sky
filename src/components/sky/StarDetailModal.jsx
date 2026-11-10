@@ -2,6 +2,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Star, Zap, Globe, Music, ShoppingBag, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getStarColorHex } from '@/lib/starData';
+import StarName from '@/components/claims/StarName';
+import { DISCLAIMER } from '@/lib/dedication';
 
 export default function StarDetailModal({ star, onClose, onBuyName }) {
   if (!star) return null;
@@ -49,13 +51,8 @@ export default function StarDetailModal({ star, onClose, onBuyName }) {
               )}
             </div>
             <div>
-              <h2 className="text-xl font-space font-bold text-foreground">{star.name}</h2>
+              <StarName as="h2" name={star.name} owner={isOwned ? star.owner_name : null} className="text-xl font-space font-bold text-foreground" />
               <p className="text-muted-foreground text-sm font-inter">{star.constellation}</p>
-              {isOwned && (
-                <p className="text-star-gold text-xs font-space mt-0.5 flex items-center gap-1">
-                  <Star size={10} fill="currentColor" /> Owned by {star.owner_name}
-                </p>
-              )}
             </div>
           </div>
 
@@ -95,25 +92,27 @@ export default function StarDetailModal({ star, onClose, onBuyName }) {
             <div className="w-full py-3 rounded-xl bg-muted/50 border border-border text-center">
               <p className="text-muted-foreground text-sm font-space">Catalog star · not in the claimable set yet</p>
             </div>
-          ) : !isOwned ? (
+          ) : !isOwned && star.star_key ? (
             <Button
               onClick={() => onBuyName(star)}
               className="w-full bg-star-gold hover:bg-star-gold/90 text-background font-space font-semibold rounded-xl h-12 glow-gold transition-all"
             >
               <ShoppingBag size={16} className="mr-2" />
-              Claim This Star — From $10
+              Name This Star — From $10
             </Button>
+          ) : !isOwned ? (
+            <p className="text-center text-sm text-muted-foreground">This sky object has no stable star ID and cannot be named.</p>
           ) : (
             <div className="w-full py-3 rounded-xl bg-muted/50 border border-border text-center">
               <p className="text-muted-foreground text-sm font-space flex items-center justify-center gap-2">
                 <Lock size={14} className="text-star-gold" />
-                Exclusively claimed · <span className="text-star-gold">{star.owner_name}</span>
+                One edition name per star · already named
               </p>
             </div>
           )}
 
           <p className="text-center text-xs text-muted-foreground mt-3 font-inter">
-            Star naming is symbolic only and is not recognized by the IAU or any official astronomical body.
+            {DISCLAIMER}
           </p>
         </motion.div>
       </motion.div>

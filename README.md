@@ -5,6 +5,7 @@ An AR star-naming app with sky exploration, daily hunts, and a global star map.
 ## Features
 
 - **AR Sky View** — Pan the night sky with touch or device orientation
+- **Scientist Mode** — Optional catalog search (HIP/HD/name/cone/mag/parallax), detail cards with provenance, live Gaia/SIMBAD enrichment, and CSV/VOTable/JSON export ([docs/scientist-mode.md](docs/scientist-mode.md))
 - **Name a Star** — Claim stars with symbolic ownership ($10 base / $20 premium)
 - **Daily Hunts** — Complete sky challenges and earn points
 - **Star Map** — Browse the celestial catalog with claimed stars highlighted
@@ -160,15 +161,27 @@ Total: 119,625 stars, 5.1 MB raw / 2.1 MB gzip across 218 files
   more tiled tiers and other tiling schemes, such as HEALPix. A tier can set its own
   `baseUrl`, and a build can set `VITE_CATALOG_TILE_BASE_URL` to serve tiles from
   another origin. Tycho-2 or Gaia tiers with millions of stars would go in an R2
-  bucket behind that URL rather than in static assets. **No R2 bucket exists yet.**
-  Creating one needs Andrew's approval. The bucket would also need CORS for the app
-  origin, and the service worker would need to cache that origin too.
+  bucket behind that URL rather than in static assets. An empty R2 bucket
+  `youneek-stars-tiles` already exists on the account; it is **not** bound or
+  uploaded to yet. Binding it, CORS for the app origin, and service-worker caching
+  of that origin need Andrew's approval in a separate change.
 - **Rebuilding**: download `hygdata_v41.csv` (sha256 in the script header) and run
   `node scripts/build-catalog.mjs path/to/hygdata_v41.csv`.
 
 Star identity uses `src/lib/starKey.js` (`gaia:` > `hip:` > `tyc:` > `hd:` > `hr:` >
 `hyg:`). See [docs/star-keys.md](docs/star-keys.md) for the planned rekeying of
 claims.
+
+### Scientist Mode
+
+Toggle **Scientist Mode** on the AR Sky View. Offline lookup uses the bundled HYG
+Tier 0 and any loaded Tier 1 tiles (ID, name, cone, magnitude, derived parallax).
+Live Gaia DR3 TAP and SIMBAD queries (proxied at `/api/scientist/*`) add proper
+motion, measured parallax/error, Teff, RUWE, and archive cross-ids when the network
+allows; failures degrade gracefully to local fields. Export search or detail rows as
+CSV, VOTable, or JSON. See [docs/scientist-mode.md](docs/scientist-mode.md) for
+local-vs-live field notes and rate-limit caveats. Tier 2 / deep Gaia HEALPix tiles
+remain out of scope.
 
 ## Checks
 

@@ -6,6 +6,8 @@ import {
 } from 'lucide-react';
 import StarCanvas from '@/components/sky/StarCanvas';
 import StarDetailModal from '@/components/sky/StarDetailModal';
+import ScientistPanel from '@/components/sky/ScientistPanel';
+import ScientistDetailCard from '@/components/sky/ScientistDetailCard';
 import StarPurchaseModal from '@/components/purchase/StarPurchaseModal';
 import CompassRose from '@/components/sky/CompassRose';
 import DirectionHUD from '@/components/sky/DirectionHUD';
@@ -13,6 +15,7 @@ import AltitudeRingHUD from '@/components/sky/AltitudeRingHUD';
 import { getNamedStars } from '@/api/apiClient';
 import { orientationToSky, smoothVector, vectorsToSky } from '@/lib/orientation';
 import { DEFAULT_FOV, MIN_FOV, MAX_FOV, magnitudeLimitForFov } from '@/lib/catalogTiles';
+import { equatorialToHorizontal } from '@/lib/astronomy';
 import {
   getActiveHuntTarget,
   setActiveHuntTarget,
@@ -23,6 +26,7 @@ import {
 
 const FLIP_LR_KEY = 'youneek_debug_flip_lr';
 const FLIP_ALT_KEY = 'youneek_debug_flip_alt';
+const SCIENTIST_KEY = 'youneek_scientist_mode';
 const readFlag = key => { try { return localStorage.getItem(key) === '1'; } catch { return false; } };
 const writeFlag = (key, value) => { try { if (value) localStorage.setItem(key, '1'); else localStorage.removeItem(key); } catch { /* private mode */ } };
 const clampFov = f => Math.max(MIN_FOV, Math.min(MAX_FOV, f));
@@ -55,6 +59,9 @@ export default function ARSkyView() {
   const [flipLR, setFlipLR] = useState(() => readFlag(FLIP_LR_KEY));
   const [flipAlt, setFlipAlt] = useState(() => readFlag(FLIP_ALT_KEY));
   const [showDebug, setShowDebug] = useState(false);
+  const [scientistMode, setScientistMode] = useState(() => readFlag(SCIENTIST_KEY));
+  const [scientistSearchOpen, setScientistSearchOpen] = useState(false);
+  const [scientistStar, setScientistStar] = useState(null);
   const flipsRef = useRef({ flipLR, flipAlt });
   flipsRef.current = { flipLR, flipAlt };
 
@@ -237,8 +244,54 @@ export default function ARSkyView() {
         }
       }
     }
+    if (scientistMode) {
+      // Prefer a Scientist record shape; curated stars already have ra/dec/ids.
+      const sci = star.ra_icrs != null ? star : {
+        ...star,
+        ra_icrs: star.ra,
+        dec_icrs: star.dec,
+        mag_v: star.magnitude,
+        spectral_type: star.spectral,
+        parallax_mas: null,
+        provenance: {
+          local: { catalog: 'HYG Database v4.1', license: 'CC BY-SA 4.0', source: star.claimable === false ? 'sky-catalog' : 'curated', fields: {} },
+          remote: null,
+        },
+      };
+      setScientistStar(sci);
+      setSelectedStar(null);
+      return;
+    }
     setSelectedStar(star);
-  }, [huntTarget]);
+  }, [huntTarget, scientistMode]);
+
+  const handleScientistSelect = useCallback((star) => {
+    setScientistStar(star);
+    setScientistSearchOpen(false);
+    // Pan toward the target when we have a sky location; otherwise leave the view alone.
+    if (skyLocation && star.ra_icrs != null && star.dec_icrs != null) {
+      const { azimuth, altitude } = equatorialToHorizontal(
+        star.ra_icrs, star.dec_icrs, skyLocation.latitude, skyLocation.longitude,
+      );
+      pushView({ azimuth, altitude, roll: 0 });
+    }
+  }, [skyLocation, pushView]);
+
+  const toggleScientistMode = () => {
+    setScientistMode(v => {
+      const next = !v;
+      writeFlag(SCIENTIST_KEY, next);
+      if (!next) {
+        setScientistSearchOpen(false);
+        setScientistStar(null);
+      } else {
+        setScientistSearchOpen(true);
+        setSelectedStar(null);
+        setPurchaseStar(null);
+      }
+      return next;
+    });
+  };
 
   const stopHunt = () => {
     setHuntTarget(null);
@@ -353,6 +406,25 @@ export default function ARSkyView() {
         {skyError && <p role="alert" className="glass-dark p-3 rounded-xl text-sm">{skyError}</p>}
         <div className="flex items-center gap-2 flex-wrap">
           <button onClick={enableDeviceSky} className="glass-dark border border-accent/40 text-accent px-3 py-2 rounded-xl text-sm">Enable device sky</button>
+          <label className={`glass-dark text-xs font-space px-2.5 py-2 rounded-xl flex items-center gap-1.5 border ${scientistMode ? 'border-accent/50 text-accent' : 'border-border/40 text-muted-foreground'}`}>
+            <input
+              type="checkbox"
+              data-testid="scientist-mode-toggle"
+              checked={scientistMode}
+              onChange={toggleScientistMode}
+            />
+            Scientist Mode
+          </label>
+          {scientistMode && (
+            <button
+              type="button"
+              data-testid="scientist-search-open"
+              onClick={() => setScientistSearchOpen(v => !v)}
+              className="glass-dark border border-accent/40 text-accent px-3 py-2 rounded-xl text-xs font-space"
+            >
+              {scientistSearchOpen ? 'Hide search' : 'Search'}
+            </button>
+          )}
           <button aria-label="Sensor debug" onClick={() => setShowDebug(v => !v)} className="glass-dark border border-border/40 text-muted-foreground p-2 rounded-xl"><Bug size={14} /></button>
           {showDebug && (
             <>
@@ -364,7 +436,19 @@ export default function ARSkyView() {
         <p className="text-[10px] text-muted-foreground/80 font-inter leading-snug">Star naming is symbolic only and is not recognized by the IAU or any official astronomical body. · Star data: HYG Database v4.1, CC BY-SA 4.0</p>
       </div>
 
-      {selectedStar && !purchaseStar && (
+      {scientistMode && (
+        <ScientistPanel
+          open={scientistSearchOpen && !scientistStar}
+          onClose={() => setScientistSearchOpen(false)}
+          onSelect={handleScientistSelect}
+        />
+      )}
+
+      {scientistMode && scientistStar && (
+        <ScientistDetailCard star={scientistStar} onClose={() => setScientistStar(null)} />
+      )}
+
+      {!scientistMode && selectedStar && !purchaseStar && (
         <StarDetailModal
           star={{
             ...selectedStar,
@@ -377,7 +461,7 @@ export default function ARSkyView() {
         />
       )}
 
-      {purchaseStar && (
+      {!scientistMode && purchaseStar && (
         <StarPurchaseModal
           star={purchaseStar}
           onClose={() => setPurchaseStar(null)}

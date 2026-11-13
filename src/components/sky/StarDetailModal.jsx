@@ -87,12 +87,23 @@ export default function StarDetailModal({ star, onClose, onBuyName }) {
             </p>
           )}
 
-          {/* Action */}
-          {star.claimable === false && !isOwned ? (
+          {/* Action: claimable===false covers catalog tiles and objects with no gaia/hip/hd key. */}
+          {isOwned ? (
             <div className="w-full py-3 rounded-xl bg-muted/50 border border-border text-center">
-              <p className="text-muted-foreground text-sm font-space">Catalog star · not in the claimable set yet</p>
+              <p className="text-muted-foreground text-sm font-space flex items-center justify-center gap-2">
+                <Lock size={14} className="text-star-gold" />
+                One edition name per star · already named
+              </p>
             </div>
-          ) : !isOwned && star.star_key ? (
+          ) : star.claimable === false ? (
+            <div className="w-full py-3 rounded-xl bg-muted/50 border border-border text-center">
+              <p className="text-muted-foreground text-sm font-space">
+                {star.star_key || star.hip || star.hd
+                  ? 'Catalog star · not in the claimable set yet'
+                  : 'This sky object has no stable star ID and cannot be named.'}
+              </p>
+            </div>
+          ) : (
             <Button
               onClick={() => onBuyName(star)}
               className="w-full bg-star-gold hover:bg-star-gold/90 text-background font-space font-semibold rounded-xl h-12 glow-gold transition-all"
@@ -100,15 +111,6 @@ export default function StarDetailModal({ star, onClose, onBuyName }) {
               <ShoppingBag size={16} className="mr-2" />
               Name This Star — From $10
             </Button>
-          ) : !isOwned ? (
-            <p className="text-center text-sm text-muted-foreground">This sky object has no stable star ID and cannot be named.</p>
-          ) : (
-            <div className="w-full py-3 rounded-xl bg-muted/50 border border-border text-center">
-              <p className="text-muted-foreground text-sm font-space flex items-center justify-center gap-2">
-                <Lock size={14} className="text-star-gold" />
-                One edition name per star · already named
-              </p>
-            </div>
           )}
 
           <p className="text-center text-xs text-muted-foreground mt-3 font-inter">

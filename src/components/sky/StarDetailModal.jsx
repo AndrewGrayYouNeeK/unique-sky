@@ -84,8 +84,18 @@ export default function StarDetailModal({ star, onClose, onBuyName }) {
             </div>
           )}
 
+          {(star.bayer || star.hip || star.hd || star.star_key) && (
+            <p className="text-[11px] text-muted-foreground font-space mb-4 break-words" data-testid="star-identifiers">
+              {[star.bayer, star.flamsteed, star.hip && `HIP ${star.hip}`, star.hd && `HD ${star.hd}`, star.star_key && `key ${star.star_key}`].filter(Boolean).join(' · ')}
+            </p>
+          )}
+
           {/* Action */}
-          {!isOwned ? (
+          {star.claimable === false && !isOwned ? (
+            <div className="w-full py-3 rounded-xl bg-muted/50 border border-border text-center">
+              <p className="text-muted-foreground text-sm font-space">Catalog star · not in the claimable set yet</p>
+            </div>
+          ) : !isOwned ? (
             <Button
               onClick={() => onBuyName(star)}
               className="w-full bg-star-gold hover:bg-star-gold/90 text-background font-space font-semibold rounded-xl h-12 glow-gold transition-all"
@@ -103,7 +113,7 @@ export default function StarDetailModal({ star, onClose, onBuyName }) {
           )}
 
           <p className="text-center text-xs text-muted-foreground mt-3 font-inter">
-            Symbolic ownership · Not official astronomical naming
+            Star naming is symbolic only and is not recognized by the IAU or any official astronomical body.
           </p>
         </motion.div>
       </motion.div>

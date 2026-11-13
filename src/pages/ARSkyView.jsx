@@ -1,16 +1,21 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Crosshair,
+  Crosshair, Plus, Minus, Bug,
   Wifi, WifiOff, Target, WifiOff as OfflineIcon, Trophy
 } from 'lucide-react';
 import StarCanvas from '@/components/sky/StarCanvas';
 import StarDetailModal from '@/components/sky/StarDetailModal';
+import ScientistPanel from '@/components/sky/ScientistPanel';
+import ScientistDetailCard from '@/components/sky/ScientistDetailCard';
 import StarPurchaseModal from '@/components/purchase/StarPurchaseModal';
 import CompassRose from '@/components/sky/CompassRose';
 import DirectionHUD from '@/components/sky/DirectionHUD';
 import AltitudeRingHUD from '@/components/sky/AltitudeRingHUD';
 import { getNamedStars } from '@/api/apiClient';
+import { orientationToSky, smoothVector, vectorsToSky } from '@/lib/orientation';
+import { DEFAULT_FOV, MIN_FOV, MAX_FOV, magnitudeLimitForFov } from '@/lib/catalogTiles';
+import { equatorialToHorizontal } from '@/lib/astronomy';
 import {
   getActiveHuntTarget,
   setActiveHuntTarget,
@@ -19,9 +24,22 @@ import {
   starMatchesHuntTarget,
 } from '@/lib/hunts';
 
+const FLIP_LR_KEY = 'youneek_debug_flip_lr';
+const FLIP_ALT_KEY = 'youneek_debug_flip_alt';
+const SCIENTIST_KEY = 'youneek_scientist_mode';
+const readFlag = key => { try { return localStorage.getItem(key) === '1'; } catch { return false; } };
+const writeFlag = (key, value) => { try { if (value) localStorage.setItem(key, '1'); else localStorage.removeItem(key); } catch { /* private mode */ } };
+const clampFov = f => Math.max(MIN_FOV, Math.min(MAX_FOV, f));
+const screenAngle = () => (typeof screen !== 'undefined' && screen.orientation && typeof screen.orientation.angle === 'number'
+  ? screen.orientation.angle
+  : typeof window.orientation === 'number' ? window.orientation : 0);
+
 export default function ARSkyView() {
-  const [azimuth, setAzimuth] = useState(180);
-  const [altitude, setAltitude] = useState(45);
+  // The live view lives in a ref so 60 Hz sensor/gesture updates never re-render React;
+  // the HUD reads a throttled copy.
+  const viewRef = useRef({ azimuth: 180, altitude: 45, roll: 0, fov: DEFAULT_FOV });
+  const [hud, setHud] = useState({ azimuth: 180, altitude: 45, fov: DEFAULT_FOV });
+  const hudTimer = useRef(null);
   const [selectedStar, setSelectedStar] = useState(null);
   const [purchaseStar, setPurchaseStar] = useState(null);
   const [ownedStars, setOwnedStars] = useState({});
@@ -33,10 +51,31 @@ export default function ARSkyView() {
   const [isDragging, setIsDragging] = useState(false);
   const isDraggingRef = useRef(false);
   const dragStart = useRef(null);
+  const pinchStart = useRef(null);
   const dragMoved = useRef(false);
   const [motionEnabled, setMotionEnabled] = useState(false);
   const [skyLocation, setSkyLocation] = useState(null);
   const [skyError, setSkyError] = useState('');
+  const [flipLR, setFlipLR] = useState(() => readFlag(FLIP_LR_KEY));
+  const [flipAlt, setFlipAlt] = useState(() => readFlag(FLIP_ALT_KEY));
+  const [showDebug, setShowDebug] = useState(false);
+  const [scientistMode, setScientistMode] = useState(() => readFlag(SCIENTIST_KEY));
+  const [scientistSearchOpen, setScientistSearchOpen] = useState(false);
+  const [scientistStar, setScientistStar] = useState(null);
+  const flipsRef = useRef({ flipLR, flipAlt });
+  flipsRef.current = { flipLR, flipAlt };
+
+  const pushView = useCallback((patch) => {
+    Object.assign(viewRef.current, patch);
+    if (hudTimer.current) return;
+    hudTimer.current = setTimeout(() => {
+      hudTimer.current = null;
+      const v = viewRef.current;
+      setHud({ azimuth: v.azimuth, altitude: v.altitude, fov: v.fov });
+    }, 100);
+  }, []);
+  useEffect(() => () => clearTimeout(hudTimer.current), []);
+
   const enableDeviceSky = async () => {
     setSkyError('');
     const orientation = window.DeviceOrientationEvent;
@@ -84,54 +123,102 @@ export default function ARSkyView() {
   }, [loadOwnedStars]);
 
   useEffect(() => {
+    if (!motionEnabled) return undefined;
+    // Android Chrome exposes an Earth-referenced stream as `deviceorientationabsolute`; iOS adds
+    // webkitCompassHeading to plain `deviceorientation`. Once absolute data arrives, relative
+    // events are ignored so the heading cannot drift.
+    const useAbsoluteEvent = 'ondeviceorientationabsolute' in window;
+    let gotAbsolute = false;
+    let smoothF = null;
+    let smoothU = null;
     const handleOrientation = (e) => {
-      if (isDraggingRef.current) return;
-      if (e.alpha === null || e.alpha === undefined) return;
-
+      if (isDraggingRef.current || pinchStart.current) return;
+      const sky = orientationToSky(e, { screenAngle: screenAngle() });
+      if (!sky) return;
+      if (sky.absolute) gotAbsolute = true;
+      else if (gotAbsolute) return;
       setHasMotion(true);
-
-      const alpha = e.alpha || 0;
-      const beta  = e.beta  || 0;
-      const gamma = e.gamma || 0;
-
-      const altitudeVal = Math.max(-90, Math.min(90, beta - 90));
-      const gammaRad = (gamma * Math.PI) / 180;
-      const heading = 'webkitCompassHeading' in e && typeof e.webkitCompassHeading === 'number' ? e.webkitCompassHeading : 360 - alpha;
-      const azimuthCorrected = ((heading + Math.sin(gammaRad) * 90) + 360) % 360;
-
-      setAzimuth(azimuthCorrected);
-      setAltitude(-altitudeVal);
+      smoothF = smoothVector(smoothF, sky.forward, 0.3);
+      smoothU = smoothVector(smoothU, sky.up, 0.3);
+      const out = vectorsToSky(smoothF, smoothU);
+      const { flipLR: lr, flipAlt: alt } = flipsRef.current;
+      pushView({
+        azimuth: lr ? (360 - out.azimuth) % 360 : out.azimuth,
+        altitude: alt ? -out.altitude : out.altitude,
+        roll: lr !== alt ? -out.roll : out.roll,
+      });
     };
+    const eventName = useAbsoluteEvent ? 'deviceorientationabsolute' : 'deviceorientation';
+    window.addEventListener(eventName, handleOrientation);
+    if (useAbsoluteEvent) window.addEventListener('deviceorientation', handleOrientation);
+    return () => {
+      window.removeEventListener(eventName, handleOrientation);
+      window.removeEventListener('deviceorientation', handleOrientation);
+    };
+  }, [motionEnabled, pushView]);
 
-    if (motionEnabled) window.addEventListener('deviceorientation', handleOrientation);
-    return () => window.removeEventListener('deviceorientation', handleOrientation);
-  }, [motionEnabled]);
+  // ── Gestures: drag to pan (the sky follows the finger), pinch / wheel / buttons to zoom ──
+  const degreesPerPixel = () => viewRef.current.fov / Math.max(window.innerWidth, window.innerHeight);
+  const touchDistance = touches => Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
 
   const handlePointerDown = useCallback((e) => {
+    if (e.touches?.length === 2) {
+      pinchStart.current = { dist: touchDistance(e.touches), fov: viewRef.current.fov };
+      dragStart.current = null;
+      dragMoved.current = true;
+      return;
+    }
     dragMoved.current = false;
     isDraggingRef.current = true;
     setIsDragging(true);
     const cx = e.clientX ?? e.touches?.[0]?.clientX;
     const cy = e.clientY ?? e.touches?.[0]?.clientY;
-    dragStart.current = { x: cx, y: cy, az: azimuth, alt: altitude };
-  }, [azimuth, altitude]);
+    dragStart.current = { x: cx, y: cy, az: viewRef.current.azimuth, alt: viewRef.current.altitude };
+  }, []);
 
   const handlePointerMove = useCallback((e) => {
-    if (!isDragging || !dragStart.current) return;
+    if (pinchStart.current && e.touches?.length === 2) {
+      pushView({ fov: clampFov(pinchStart.current.fov * pinchStart.current.dist / Math.max(1, touchDistance(e.touches))) });
+      return;
+    }
+    if (!isDraggingRef.current || !dragStart.current) return;
     const cx = e.clientX ?? e.touches?.[0]?.clientX;
     const cy = e.clientY ?? e.touches?.[0]?.clientY;
     const dx = cx - dragStart.current.x;
     const dy = cy - dragStart.current.y;
     if (Math.hypot(dx, dy) > 6) dragMoved.current = true;
-    setAzimuth(((dragStart.current.az - dx * 0.25) + 360) % 360);
-    setAltitude(Math.min(90, Math.max(-90, dragStart.current.alt + dy * 0.18)));
-  }, [isDragging]);
+    const k = degreesPerPixel();
+    // Finger right -> sky moves right -> we look further left (lower azimuth). Finger down -> look up.
+    pushView({
+      azimuth: ((dragStart.current.az - dx * k) % 360 + 360) % 360,
+      altitude: Math.min(90, Math.max(-90, dragStart.current.alt + dy * k)),
+      roll: 0,
+    });
+  }, [pushView]);
 
-  const handlePointerUp = useCallback(() => {
+  const handlePointerUp = useCallback((e) => {
+    if (e?.touches?.length) return; // a finger is still down (end of pinch)
+    pinchStart.current = null;
     isDraggingRef.current = false;
     setIsDragging(false);
     dragStart.current = null;
   }, []);
+
+  const zoomBy = useCallback(factor => pushView({ fov: clampFov(viewRef.current.fov * factor) }), [pushView]);
+  const surfaceRef = useRef(null);
+  useEffect(() => {
+    const el = surfaceRef.current;
+    if (!el) return undefined;
+    // Non-passive so the page itself doesn't scroll/zoom.
+    const onWheel = e => { e.preventDefault(); zoomBy(Math.exp(e.deltaY * 0.0015)); };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [zoomBy]);
+
+  const toggleFlip = (which) => {
+    if (which === 'lr') { setFlipLR(v => { writeFlag(FLIP_LR_KEY, !v); return !v; }); }
+    else { setFlipAlt(v => { writeFlag(FLIP_ALT_KEY, !v); return !v; }); }
+  };
 
   const handleStarClaimed = useCallback((claimedStar) => {
     setOwnedStars(prev => ({
@@ -157,8 +244,54 @@ export default function ARSkyView() {
         }
       }
     }
+    if (scientistMode) {
+      // Prefer a Scientist record shape; curated stars already have ra/dec/ids.
+      const sci = star.ra_icrs != null ? star : {
+        ...star,
+        ra_icrs: star.ra,
+        dec_icrs: star.dec,
+        mag_v: star.magnitude,
+        spectral_type: star.spectral,
+        parallax_mas: null,
+        provenance: {
+          local: { catalog: 'HYG Database v4.1', license: 'CC BY-SA 4.0', source: star.claimable === false ? 'sky-catalog' : 'curated', fields: {} },
+          remote: null,
+        },
+      };
+      setScientistStar(sci);
+      setSelectedStar(null);
+      return;
+    }
     setSelectedStar(star);
-  }, [huntTarget]);
+  }, [huntTarget, scientistMode]);
+
+  const handleScientistSelect = useCallback((star) => {
+    setScientistStar(star);
+    setScientistSearchOpen(false);
+    // Pan toward the target when we have a sky location; otherwise leave the view alone.
+    if (skyLocation && star.ra_icrs != null && star.dec_icrs != null) {
+      const { azimuth, altitude } = equatorialToHorizontal(
+        star.ra_icrs, star.dec_icrs, skyLocation.latitude, skyLocation.longitude,
+      );
+      pushView({ azimuth, altitude, roll: 0 });
+    }
+  }, [skyLocation, pushView]);
+
+  const toggleScientistMode = () => {
+    setScientistMode(v => {
+      const next = !v;
+      writeFlag(SCIENTIST_KEY, next);
+      if (!next) {
+        setScientistSearchOpen(false);
+        setScientistStar(null);
+      } else {
+        setScientistSearchOpen(true);
+        setSelectedStar(null);
+        setPurchaseStar(null);
+      }
+      return next;
+    });
+  };
 
   const stopHunt = () => {
     setHuntTarget(null);
@@ -172,6 +305,7 @@ export default function ARSkyView() {
       </div>
 
       <div
+        ref={surfaceRef}
         className="absolute inset-0"
         onMouseDown={handlePointerDown}
         onMouseMove={handlePointerMove}
@@ -184,12 +318,12 @@ export default function ARSkyView() {
         style={{ touchAction: 'none', cursor: isDragging ? 'grabbing' : 'crosshair' }}
       >
         <StarCanvas
+          viewRef={viewRef}
           location={skyLocation}
-          azimuth={azimuth}
-          altitude={altitude}
           onStarClick={handleStarClick}
           ownedStars={ownedStars}
           huntTarget={huntTarget}
+          selectedStarId={selectedStar?.id || null}
         />
       </div>
 
@@ -214,13 +348,19 @@ export default function ARSkyView() {
               )}
             </div>
           </div>
-          <DirectionHUD azimuth={azimuth} altitude={altitude} />
-          <CompassRose azimuth={azimuth} />
+          <DirectionHUD azimuth={hud.azimuth} altitude={hud.altitude} />
+          <CompassRose azimuth={hud.azimuth} />
         </div>
       </div>
 
+      <div className="absolute left-3 top-1/2 -translate-y-1/2 z-30 flex flex-col items-center gap-2">
+        <button aria-label="Zoom in" onClick={() => zoomBy(1 / 1.4)} className="glass-dark border border-accent/40 text-accent w-9 h-9 rounded-full flex items-center justify-center"><Plus size={16} /></button>
+        <span className="glass-dark text-[10px] font-space text-muted-foreground px-1.5 py-0.5 rounded" data-testid="fov-readout">{Math.round(hud.fov)}° · mag {magnitudeLimitForFov(hud.fov).toFixed(1)}</span>
+        <button aria-label="Zoom out" onClick={() => zoomBy(1.4)} className="glass-dark border border-accent/40 text-accent w-9 h-9 rounded-full flex items-center justify-center"><Minus size={16} /></button>
+      </div>
+
       <div className="absolute right-3 top-1/2 -translate-y-1/2 z-30 pointer-events-none">
-        <AltitudeRingHUD altitude={altitude} />
+        <AltitudeRingHUD altitude={hud.altitude} />
       </div>
 
       <AnimatePresence>
@@ -264,10 +404,51 @@ export default function ARSkyView() {
 
       <div className="absolute bottom-20 left-0 right-0 z-30 px-4 space-y-3">
         {skyError && <p role="alert" className="glass-dark p-3 rounded-xl text-sm">{skyError}</p>}
-        <button onClick={enableDeviceSky} className="glass-dark border border-accent/40 text-accent px-3 py-2 rounded-xl text-sm">Enable device sky</button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={enableDeviceSky} className="glass-dark border border-accent/40 text-accent px-3 py-2 rounded-xl text-sm">Enable device sky</button>
+          <label className={`glass-dark text-xs font-space px-2.5 py-2 rounded-xl flex items-center gap-1.5 border ${scientistMode ? 'border-accent/50 text-accent' : 'border-border/40 text-muted-foreground'}`}>
+            <input
+              type="checkbox"
+              data-testid="scientist-mode-toggle"
+              checked={scientistMode}
+              onChange={toggleScientistMode}
+            />
+            Scientist Mode
+          </label>
+          {scientistMode && (
+            <button
+              type="button"
+              data-testid="scientist-search-open"
+              onClick={() => setScientistSearchOpen(v => !v)}
+              className="glass-dark border border-accent/40 text-accent px-3 py-2 rounded-xl text-xs font-space"
+            >
+              {scientistSearchOpen ? 'Hide search' : 'Search'}
+            </button>
+          )}
+          <button aria-label="Sensor debug" onClick={() => setShowDebug(v => !v)} className="glass-dark border border-border/40 text-muted-foreground p-2 rounded-xl"><Bug size={14} /></button>
+          {showDebug && (
+            <>
+              <label className="glass-dark text-xs font-space px-2 py-1.5 rounded-lg flex items-center gap-1"><input type="checkbox" checked={flipLR} onChange={() => toggleFlip('lr')} /> Flip left/right</label>
+              <label className="glass-dark text-xs font-space px-2 py-1.5 rounded-lg flex items-center gap-1"><input type="checkbox" checked={flipAlt} onChange={() => toggleFlip('alt')} /> Flip altitude</label>
+            </>
+          )}
+        </div>
+        <p className="text-[10px] text-muted-foreground/80 font-inter leading-snug">Star naming is symbolic only and is not recognized by the IAU or any official astronomical body. · Star data: HYG Database v4.1, CC BY-SA 4.0</p>
       </div>
 
-      {selectedStar && !purchaseStar && (
+      {scientistMode && (
+        <ScientistPanel
+          open={scientistSearchOpen && !scientistStar}
+          onClose={() => setScientistSearchOpen(false)}
+          onSelect={handleScientistSelect}
+        />
+      )}
+
+      {scientistMode && scientistStar && (
+        <ScientistDetailCard star={scientistStar} onClose={() => setScientistStar(null)} />
+      )}
+
+      {!scientistMode && selectedStar && !purchaseStar && (
         <StarDetailModal
           star={{
             ...selectedStar,
@@ -280,7 +461,7 @@ export default function ARSkyView() {
         />
       )}
 
-      {purchaseStar && (
+      {!scientistMode && purchaseStar && (
         <StarPurchaseModal
           star={purchaseStar}
           onClose={() => setPurchaseStar(null)}

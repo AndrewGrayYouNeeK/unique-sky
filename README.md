@@ -5,6 +5,7 @@ An AR star-naming app with sky exploration, daily hunts, and a global star map.
 ## Features
 
 - **AR Sky View** — Pan the night sky with touch or device orientation
+- **Scientist Mode** — Optional catalog search (HIP/HD/name/cone/mag/parallax), detail cards with provenance, live Gaia/SIMBAD enrichment, and CSV/VOTable/JSON export ([docs/scientist-mode.md](docs/scientist-mode.md))
 - **Name a Star** — Claim stars with symbolic ownership ($10 base / $20 premium)
 - **Daily Hunts** — Complete sky challenges and earn points
 - **Star Map** — Browse the celestial catalog with claimed stars highlighted
@@ -124,6 +125,63 @@ disabled. New migrations or domain changes need Andrew's approval first.
 References: [Worker static assets](https://developers.cloudflare.com/workers/static-assets/),
 [D1 transactions/batches](https://developers.cloudflare.com/d1/worker-api/d1-database/#batch),
 [Custom Domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/).
+
+## Sky catalog (AR Sky View)
+
+The AR Sky View draws a tiered, tiled star catalog built from the
+**HYG Database v4.1** by David Nash / astronexus.com
+(<https://github.com/astronexus/HYG-Database>), licensed
+**[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)**. The derived
+files in `public/catalog/` are shared under the same license. Attribution is shown
+in the app's sky view.
+
+| Tier | Contents | Stars | Files |
+| --- | --- | ---: | --- |
+| Tier 0 | mag ≤ 6.5 plus every star with a proper name | 9,026 | `hyg41/t0.json`, 626 KB (218 KB gzip) |
+| Tier 1 bin 0 | 6.5 < mag ≤ 7.5 | 16,852 | 72 tiles, largest 22 KB |
+| Tier 1 bin 1 | 7.5 < mag ≤ 8.5 | 35,985 | 72 tiles, largest 40 KB |
+| Tier 1 bin 2 | 8.5 < mag ≤ ~21 | 57,762 | 72 tiles, largest 57 KB |
+
+Total: 119,625 stars, 5.1 MB raw / 2.1 MB gzip across 218 files
+(Workers static assets allow 25 MiB per file).
+
+- **Tier 0** ships with the app's static assets and is always loaded. Labels, hunts,
+  and the curated claimable stars rely on it.
+- **Tier 1** is split by magnitude bin and by 30°×30° RA/Dec tile. A tile is fetched
+  only when the zoom's magnitude limit reaches its bin and the tile overlaps the view.
+  Fetched tiles stay in memory.
+- **Zoom**: pinch, mouse wheel, or the +/- buttons (2°–100° field of view). The
+  magnitude limit is `5.5 + 3.5·log10(70°/FOV)`, which gives about 5.5 at 70°, 7.6
+  at 17°, and 9.6 at 5°. Stars fade in near the limit, and at most 3,500 catalog
+  points are drawn per frame. Labels follow a similar, brighter limit, and
+  overlapping labels are skipped.
+- **Offline**: `public/sw.js` (production only) caches the manifest and Tier 0 on
+  install. Every Tier 1 tile that has been viewed is cached as well.
+- **Storage / future tiers**: the manifest format (`youneek-catalog/1`) supports
+  more tiled tiers and other tiling schemes, such as HEALPix. A tier can set its own
+  `baseUrl`, and a build can set `VITE_CATALOG_TILE_BASE_URL` to serve tiles from
+  another origin. Tycho-2 or Gaia tiers with millions of stars would go in an R2
+  bucket behind that URL rather than in static assets. An empty R2 bucket
+  `youneek-stars-tiles` already exists on the account; it is **not** bound or
+  uploaded to yet. Binding it, CORS for the app origin, and service-worker caching
+  of that origin need Andrew's approval in a separate change.
+- **Rebuilding**: download `hygdata_v41.csv` (sha256 in the script header) and run
+  `node scripts/build-catalog.mjs path/to/hygdata_v41.csv`.
+
+Star identity uses `src/lib/starKey.js` (`gaia:` > `hip:` > `tyc:` > `hd:` > `hr:` >
+`hyg:`). See [docs/star-keys.md](docs/star-keys.md) for the planned rekeying of
+claims.
+
+### Scientist Mode
+
+Toggle **Scientist Mode** on the AR Sky View. Offline lookup uses the bundled HYG
+Tier 0 and any loaded Tier 1 tiles (ID, name, cone, magnitude, derived parallax).
+Live Gaia DR3 TAP and SIMBAD queries (proxied at `/api/scientist/*`) add proper
+motion, measured parallax/error, Teff, RUWE, and archive cross-ids when the network
+allows; failures degrade gracefully to local fields. Export search or detail rows as
+CSV, VOTable, or JSON. See [docs/scientist-mode.md](docs/scientist-mode.md) for
+local-vs-live field notes and rate-limit caveats. Tier 2 / deep Gaia HEALPix tiles
+remain out of scope.
 
 ## Checks
 

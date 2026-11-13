@@ -5,6 +5,8 @@ import { api } from '@/api/apiClient';
 import { HUNTS } from '@/lib/hunts';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import StarName from '@/components/claims/StarName';
+import { DISCLAIMER } from '@/lib/dedication';
 
 export default function Profile() {
   const { user, updateProfile } = useAuth();
@@ -52,10 +54,10 @@ export default function Profile() {
         <section className="glass-card rounded-2xl p-5 mb-5">
           <h2 className="font-space font-semibold mb-3">My Stars</h2>
           {profile.stars.length === 0 ? <p className="text-muted-foreground text-sm">No symbolic claims yet. Explore the catalog in Name a Star.</p> :
-            profile.stars.map(star => <div key={star.id} className="py-3 border-b border-border/30"><strong className="text-star-gold">{star.name}</strong><p className="text-sm text-muted-foreground">{star.constellation} · {star.ownership_tier} · Named for {star.owner_name}</p></div>)}
+            profile.stars.map(star => <div key={star.id} className="py-3 border-b border-border/30"><StarName as="strong" name={star.name} owner={star.owner_name} className="text-foreground" /><p className="text-sm text-muted-foreground">{star.constellation} · {star.ownership_tier}</p></div>)}
         </section>
       </>}
-      <p className="text-xs text-muted-foreground leading-relaxed">Star naming in YouneeK Stars is symbolic only and is not recognized by the International Astronomical Union or any official astronomical body.</p>
+      <p className="text-xs text-muted-foreground leading-relaxed">{DISCLAIMER}</p>
     </div>
   );
 }

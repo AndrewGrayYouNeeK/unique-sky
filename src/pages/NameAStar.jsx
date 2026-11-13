@@ -1,35 +1,25 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Lock, Crown, Sparkles } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import StarPurchaseModal from '@/components/purchase/StarPurchaseModal';
 import { BRIGHT_STARS, getStarColorHex } from '@/lib/starData';
-import { getNamedStars } from '@/api/apiClient';
+import { brightStarKey } from '@/lib/brightStarKeys';
+import { openClaimPage } from '@/lib/claimLinks';
+import StarName from '@/components/claims/StarName';
+import useNamedStars from '@/lib/useNamedStars';
 
 const FILTERS = ['All Stars', 'Available', 'Claimed', 'Bright', 'Faint'];
 
 export default function NameAStar() {
   const [search, setSearch] = useState('');
-  const [error, setError] = useState('');
   const [filter, setFilter] = useState('All Stars');
-  const [selectedStar, setSelectedStar] = useState(null);
-  const [ownedStars, setOwnedStars] = useState({});
-  const [loading, setLoading] = useState(true);
+  const { named, loading, error } = useNamedStars();
+  const ownedStars = Object.fromEntries(named.map(s => [s.hip_id, { owner: s.owner_name, tier: s.ownership_tier }]));
+  const claimableStars = BRIGHT_STARS.filter(star => brightStarKey(star.id));
 
-  useEffect(() => {
-    getNamedStars()
-      .then(stars => {
-        const map = {};
-        stars.forEach(s => { map[s.hip_id || s.name.toLowerCase()] = { owner: s.owner_name, tier: s.ownership_tier }; });
-        setOwnedStars(map);
-      })
-      .catch(err => setError(err.message))
-      .finally(() => setLoading(false));
-  }, []);
+  const getStarOwnership = (star) => ownedStars[star.id];
 
-  const getStarOwnership = (star) => ownedStars[star.id] || ownedStars[star.name.toLowerCase()];
-
-  const filtered = BRIGHT_STARS.filter(star => {
+  const filtered = claimableStars.filter(star => {
     const ownership = getStarOwnership(star);
     const matchSearch = star.name.toLowerCase().includes(search.toLowerCase()) ||
       star.constellation.toLowerCase().includes(search.toLowerCase());
@@ -41,12 +31,7 @@ export default function NameAStar() {
     return true;
   });
 
-  const handleSuccess = (star) => {
-    setOwnedStars(prev => ({ ...prev, [star.id]: { owner: star.owner_name, tier: star.ownership_tier } }));
-    setSelectedStar(null);
-  };
-
-  const totalStars = BRIGHT_STARS.length;
+  const totalStars = claimableStars.length;
   const claimedCount = Object.keys(ownedStars).length;
   const availableCount = totalStars - claimedCount;
 
@@ -65,7 +50,7 @@ export default function NameAStar() {
           {error && <p role="alert" className="text-destructive mb-3">Claims unavailable: {error}</p>}
           <h1 className="nebula-text font-space font-bold text-3xl mb-1">Name a Star</h1>
           <p className="text-muted-foreground text-sm font-inter">
-            Symbolic star naming · $10 base / $20 premium. Paid claims are not yet enabled.
+            Symbolic star naming · $10 base / $20 premium. Purchases happen on the website via secure checkout.
           </p>
         </motion.div>
 
@@ -136,7 +121,7 @@ export default function NameAStar() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.02 }}
               disabled={Boolean(error)}
-              onClick={() => !ownership && setSelectedStar(star)}
+              onClick={() => !ownership && openClaimPage({ star_key: brightStarKey(star.id) })}
               className={`w-full glass-card rounded-xl p-4 flex items-center gap-4 text-left transition-all ${
                 ownership ? 'opacity-70 cursor-default' : 'hover:border-star-gold/30 active:scale-98'
               }`}
@@ -150,13 +135,13 @@ export default function NameAStar() {
 
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-0.5">
-                  <span className="font-space font-semibold text-foreground text-sm">{star.name}</span>
+                  <StarName name={star.name} owner={ownership?.owner} className="font-space font-semibold text-foreground text-sm" />
                   {ownership?.tier === 'premium' && <Crown size={12} className="text-secondary flex-shrink-0" />}
                 </div>
                 <p className="text-muted-foreground text-xs font-inter truncate">{star.constellation} · {star.spectral}</p>
                 {ownership ? (
-                  <p className="text-star-gold text-xs font-space mt-0.5 flex items-center gap-1">
-                    <Lock size={10} /> Owned by {ownership.owner}
+                  <p className="text-muted-foreground text-xs font-space mt-0.5 flex items-center gap-1">
+                    <Lock size={10} /> Already named
                   </p>
                 ) : (
                   <p className="text-accent text-xs font-space mt-0.5 flex items-center gap-1">
@@ -175,13 +160,6 @@ export default function NameAStar() {
         })}
       </div>
 
-      {selectedStar && (
-        <StarPurchaseModal
-          star={selectedStar}
-          onClose={() => setSelectedStar(null)}
-          onSuccess={handleSuccess}
-        />
-      )}
     </div>
   );
 }

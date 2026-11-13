@@ -8,11 +8,13 @@ import StarCanvas from '@/components/sky/StarCanvas';
 import StarDetailModal from '@/components/sky/StarDetailModal';
 import ScientistPanel from '@/components/sky/ScientistPanel';
 import ScientistDetailCard from '@/components/sky/ScientistDetailCard';
-import StarPurchaseModal from '@/components/purchase/StarPurchaseModal';
 import CompassRose from '@/components/sky/CompassRose';
 import DirectionHUD from '@/components/sky/DirectionHUD';
 import AltitudeRingHUD from '@/components/sky/AltitudeRingHUD';
 import { getNamedStars } from '@/api/apiClient';
+import { openClaimPage } from '@/lib/claimLinks';
+import { brightStarKey } from '@/lib/brightStarKeys';
+import { NAMED_STARS_REFRESH_MS } from '@/lib/useNamedStars';
 import { orientationToSky, smoothVector, vectorsToSky } from '@/lib/orientation';
 import { DEFAULT_FOV, MIN_FOV, MAX_FOV, magnitudeLimitForFov } from '@/lib/catalogTiles';
 import { equatorialToHorizontal } from '@/lib/astronomy';
@@ -41,7 +43,6 @@ export default function ARSkyView() {
   const [hud, setHud] = useState({ azimuth: 180, altitude: 45, fov: DEFAULT_FOV });
   const hudTimer = useRef(null);
   const [selectedStar, setSelectedStar] = useState(null);
-  const [purchaseStar, setPurchaseStar] = useState(null);
   const [ownedStars, setOwnedStars] = useState({});
   const [ownedStarDetails, setOwnedStarDetails] = useState({});
   const [hasMotion, setHasMotion] = useState(false);
@@ -120,6 +121,10 @@ export default function ARSkyView() {
 
   useEffect(() => {
     loadOwnedStars();
+    // Claims are global: refresh periodically and when the app regains focus.
+    const timer = setInterval(() => { if (document.visibilityState !== 'hidden') loadOwnedStars(); }, NAMED_STARS_REFRESH_MS);
+    window.addEventListener('focus', loadOwnedStars);
+    return () => { clearInterval(timer); window.removeEventListener('focus', loadOwnedStars); };
   }, [loadOwnedStars]);
 
   useEffect(() => {
@@ -220,16 +225,6 @@ export default function ARSkyView() {
     else { setFlipAlt(v => { writeFlag(FLIP_ALT_KEY, !v); return !v; }); }
   };
 
-  const handleStarClaimed = useCallback((claimedStar) => {
-    setOwnedStars(prev => ({
-      ...prev,
-      [claimedStar.hip_id || claimedStar.id]: claimedStar.owner_name,
-      [claimedStar.name?.toLowerCase()]: claimedStar.owner_name,
-    }));
-    setPurchaseStar(null);
-    loadOwnedStars();
-  }, [loadOwnedStars]);
-
   const handleStarClick = useCallback(async (star) => {
     if (dragMoved.current) return;
     if (huntTarget && starMatchesHuntTarget(star, huntTarget)) {
@@ -287,7 +282,6 @@ export default function ARSkyView() {
       } else {
         setScientistSearchOpen(true);
         setSelectedStar(null);
-        setPurchaseStar(null);
       }
       return next;
     });
@@ -448,24 +442,18 @@ export default function ARSkyView() {
         <ScientistDetailCard star={scientistStar} onClose={() => setScientistStar(null)} />
       )}
 
-      {!scientistMode && selectedStar && !purchaseStar && (
+      {!scientistMode && selectedStar && (
         <StarDetailModal
           star={{
             ...selectedStar,
             ...ownedStarDetails[selectedStar.hip_id || selectedStar.id] || ownedStarDetails[selectedStar.name?.toLowerCase()],
             is_named: ownedStars[selectedStar.hip_id || selectedStar.id] !== undefined || ownedStars[selectedStar.name?.toLowerCase()] !== undefined,
             owner_name: ownedStars[selectedStar.hip_id || selectedStar.id] || ownedStars[selectedStar.name?.toLowerCase()],
+            star_key: selectedStar.star_key || brightStarKey(selectedStar.id),
+            claimable: selectedStar.claimable !== false && Boolean(selectedStar.star_key || brightStarKey(selectedStar.id)),
           }}
           onClose={() => setSelectedStar(null)}
-          onBuyName={(star) => { setSelectedStar(null); setPurchaseStar(star); }}
-        />
-      )}
-
-      {!scientistMode && purchaseStar && (
-        <StarPurchaseModal
-          star={purchaseStar}
-          onClose={() => setPurchaseStar(null)}
-          onSuccess={handleStarClaimed}
+          onBuyName={(star) => openClaimPage(star)}
         />
       )}
     </div>

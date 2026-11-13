@@ -21,6 +21,10 @@
     "database_id": "7f15abe2-47ab-4788-9239-7020ddc1bd7f",
     "migrations_dir": "migrations"
   }],
+  // CLAIM_MODE stays "disabled" until Andrew audits Stripe test mode.
+  // "stripe" also requires secrets set with `wrangler secret put`
+  // (never in this file): STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET.
+  // "demo" only works on localhost/127.0.0.1/[::1].
   "vars": { "CLAIM_MODE": "disabled" },
   "observability": {
     "enabled": true,

@@ -1,6 +1,7 @@
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { migrate } from './helpers/migrate.mjs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { build } from 'esbuild';
@@ -21,8 +22,7 @@ before(async () => {
   script = (await build({ entryPoints: ['worker/index.ts'], bundle: true, write: false, format: 'esm', platform: 'browser' })).outputFiles[0].text;
   mf = runtime();
   db = await mf.getD1Database('STARS_DB');
-  const sql = await readFile('migrations/0001_initial.sql', 'utf8');
-  for (const statement of sql.split(';').map(s => s.trim()).filter(Boolean)) await db.prepare(statement).run();
+  await migrate(db);
 });
 after(async () => { await mf?.dispose(); await rm(persist, { recursive: true, force: true }); });
 function client(host = 'localhost') {
@@ -81,8 +81,9 @@ test('simultaneous claims have one winner; D1 claim and server-priced demo purch
   assert.deepEqual(results.map(r => r.status).sort(), [201, 409]);
   const success = results.find(r => r.status === 201);
   assert.equal(success.data.star.name, 'Sirius');
+  assert.equal(success.data.star.star_key, 'hip:32349');
   assert.equal(success.data.star.ra, BRIGHT_STARS.find(s => s.id === 'sirius').ra);
-  const purchase = await db.prepare("SELECT * FROM purchases WHERE star_id = 'sirius'").all();
+  const purchase = await db.prepare("SELECT * FROM purchases WHERE star_key = 'hip:32349'").all();
   assert.equal(purchase.results.length, 1);
   assert.equal(purchase.results[0].amount_cents, 2000);
   assert.equal(purchase.results[0].status, 'demo');
@@ -101,19 +102,19 @@ test('base tier also uses server pricing and does not keep premium-only stories'
   const result = await request('/api/stars/claim', { star_id: 'vega', buyer_name: 'Base Demo', tier: 'base', amount_cents: 2000, custom_myth: 'Not included' });
   assert.equal(result.status, 201);
   assert.equal(result.data.star.custom_myth, '');
-  const purchase = await db.prepare("SELECT amount_cents, status FROM purchases WHERE star_id = 'vega'").first();
+  const purchase = await db.prepare("SELECT amount_cents, status FROM purchases WHERE legacy_star_id = 'vega'").first();
   assert.equal(purchase.amount_cents, 1000);
   assert.equal(purchase.status, 'demo');
 });
 test('a failed purchase write rolls the claim back instead of leaving partial ownership', async () => {
   const request = client();
   await request('/api/config');
-  await db.prepare("CREATE TRIGGER fail_purchase BEFORE INSERT ON purchases WHEN NEW.star_id = 'alnilam' BEGIN SELECT RAISE(ABORT, 'test failure'); END").run();
+  await db.prepare("CREATE TRIGGER fail_purchase BEFORE INSERT ON purchases WHEN NEW.star_key = 'hip:26311' BEGIN SELECT RAISE(ABORT, 'test failure'); END").run();
   try {
     const result = await request('/api/stars/claim', { star_id: 'alnilam', buyer_name: 'Rollback Demo', tier: 'base' });
     assert.equal(result.status, 503);
-    assert.equal(await db.prepare("SELECT star_id FROM claims WHERE star_id = 'alnilam'").first(), null);
-    assert.equal(await db.prepare("SELECT star_id FROM purchases WHERE star_id = 'alnilam'").first(), null);
+    assert.equal(await db.prepare("SELECT star_key FROM claims WHERE legacy_star_id = 'alnilam'").first(), null);
+    assert.equal(await db.prepare("SELECT star_key FROM purchases WHERE legacy_star_id = 'alnilam'").first(), null);
     assert.ok(!JSON.stringify(result.data).includes('test failure'));
   } finally { await db.prepare('DROP TRIGGER fail_purchase').run(); }
 });

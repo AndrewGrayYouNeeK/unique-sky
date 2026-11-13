@@ -1,24 +1,20 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Lock, Globe } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { BRIGHT_STARS, getStarColorHex, magnitudeToSize } from '@/lib/starData';
-import { getNamedStars } from '@/api/apiClient';
+import useNamedStars from '@/lib/useNamedStars';
+import StarName from '@/components/claims/StarName';
+import { openClaimPage } from '@/lib/claimLinks';
+import { brightStarKey } from '@/lib/brightStarKeys';
 
 const CONSTELLATIONS = [...new Set(BRIGHT_STARS.map(s => s.constellation))];
 
 export default function StarMap() {
   const [search, setSearch] = useState('');
-  const [error, setError] = useState('');
   const [selectedConstellation, setSelectedConstellation] = useState('All');
   const [hoveredStar, setHoveredStar] = useState(null);
-  const [ownedStars, setOwnedStars] = useState([]);
-
-  useEffect(() => {
-    getNamedStars()
-      .then(stars => setOwnedStars(stars))
-      .catch(err => setError(err.message));
-  }, []);
+  const { named: ownedStars, error } = useNamedStars();
 
   const filtered = BRIGHT_STARS.filter(star => {
     const matchSearch = `${star.name} ${star.constellation}`.toLowerCase().includes(search.toLowerCase());
@@ -36,7 +32,7 @@ export default function StarMap() {
   };
 
   const getOwnership = (star) =>
-    ownedStars.find(s => s.hip_id === star.id || s.name?.toLowerCase() === star.name.toLowerCase());
+    ownedStars.find(s => s.hip_id === star.id);
 
   return (
     <div className="min-h-screen sky-gradient pb-24 pt-6">
@@ -124,7 +120,6 @@ export default function StarMap() {
                   onFocus={() => setHoveredStar({ ...star, ...ownership, is_named: isNamed, owner_name: ownership?.owner_name })}
                   onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setHoveredStar({ ...star, ...ownership, is_named: isNamed, owner_name: ownership?.owner_name }); } }}
                   onMouseEnter={() => setHoveredStar({ ...star, ...ownership, is_named: isNamed, owner_name: ownership?.owner_name })}
-                  onMouseLeave={() => setHoveredStar(null)}
                   style={{ cursor: 'pointer' }}
                 >
                   <circle cx={x} cy={y} r={Math.max(size * 3, 12)} fill="transparent" />
@@ -149,12 +144,15 @@ export default function StarMap() {
                 <div className="w-2 h-2 rounded-full" style={{ background: getStarColorHex(hoveredStar.color || 'white') }} />
               </div>
               <div className="flex-1">
-                <p className="font-space font-semibold text-foreground text-sm">{hoveredStar.name}</p>
+                <StarName as="p" name={hoveredStar.name} owner={hoveredStar.owner_name} className="font-space font-semibold text-foreground text-sm" />
                 <p className="text-muted-foreground text-xs">
                   {hoveredStar.constellation} · {hoveredStar.magnitude.toFixed(2)} mag · {hoveredStar.distance_ly} ly
-                  {hoveredStar.owner_name && ` · ★ ${hoveredStar.owner_name}`}
                 </p>
               </div>
+              {!hoveredStar.owner_name && brightStarKey(hoveredStar.id) && (
+                <button type="button" onClick={() => openClaimPage({ star_key: brightStarKey(hoveredStar.id) })}
+                  className="flex-shrink-0 text-xs font-space px-3 py-1.5 rounded-lg bg-star-gold text-background">Name this star</button>
+              )}
             </div>
           )}
         </div>

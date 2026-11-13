@@ -1,6 +1,7 @@
 import { useRef, useEffect, useCallback } from 'react';
 import { BRIGHT_STARS, getStarColorHex, magnitudeToSize, magnitudeToOpacity } from '@/lib/starData';
 import { LEGACY_STAR_IDS, starKey } from '@/lib/starKey';
+import { editionLabel } from '@/lib/dedication';
 import { createProjector, equatorialToHorizontalMatrix, raDecToVector, colorForCi, placeLabels } from '@/lib/skyProjection';
 import { skyToVector } from '@/lib/orientation';
 import { createCatalogLoader, magnitudeLimitForFov, labelMagnitudeForFov, fadeForMagnitude, tilesForCone, RADEC_TILING } from '@/lib/catalogTiles';
@@ -257,7 +258,7 @@ export default function StarCanvas({
         const font = owner ? 'bold 11px Space Grotesk' : '10px Space Grotesk';
         labels.push({ x: pos.x + size + 5, y: pos.y - 1, text: star.name, font, width: measure(star.name, font), priority: owner ? 0 : isHunt ? 1 : isSelected ? 2 : 5 + star.magnitude, color: owner ? 'rgba(251,191,36,0.95)' : isHunt ? 'rgba(34,211,238,0.9)' : 'rgba(200,220,255,0.8)' });
         if (owner) {
-          const text = `★ ${owner}`;
+          const text = `★ ${editionLabel(owner)}`;
           labels.push({ x: pos.x + size + 5, y: pos.y + 11, text, font: 'bold 9px Space Grotesk', width: measure(text, 'bold 9px Space Grotesk'), priority: 0.5, color: 'rgba(251,191,36,0.85)' });
         }
       }

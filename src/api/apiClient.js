@@ -50,7 +50,16 @@ export const api = {
       if (limit) params.set('limit', String(limit));
       return request(`/stars?${params}`);
     },
+    /** @param {string} ref stable key (hip:32349) or catalog slug */
+    get: ref => request(`/stars/${encodeURIComponent(ref)}`),
+    // Unpaid local demo only (loopback + CLAIM_MODE=demo). Public claims use checkout.
     claim: payload => request('/stars/claim', { method: 'POST', body: JSON.stringify(payload) }),
+  },
+  checkout: {
+    /** @param {{star: string, tier: string, owner_name: string, custom_myth?: string}} payload */
+    start: payload => request('/checkout', { method: 'POST', body: JSON.stringify(payload) }),
+    /** @param {string} sessionId */
+    session: sessionId => request(`/claims/session/${encodeURIComponent(sessionId)}`),
   },
   hunts: {
     getCompletions: () => request('/hunts/completions'),

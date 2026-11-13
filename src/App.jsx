@@ -11,6 +11,8 @@ import NameAStar from './pages/NameAStar';
 import DailyHunts from './pages/DailyHunts';
 import StarMap from './pages/StarMap';
 import Profile from './pages/Profile';
+import Claim from './pages/Claim';
+import ClaimSuccess from './pages/ClaimSuccess';
 
 export function AppRoutes() {
   return (
@@ -21,6 +23,8 @@ export function AppRoutes() {
         <Route path="/hunts" element={<DailyHunts />} />
         <Route path="/star-map" element={<StarMap />} />
         <Route path="/profile" element={<Profile />} />
+        <Route path="/claim" element={<Claim />} />
+        <Route path="/claim/success" element={<ClaimSuccess />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>

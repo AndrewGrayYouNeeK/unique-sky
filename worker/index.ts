@@ -1,5 +1,6 @@
 import { BRIGHT_STARS } from '../src/lib/starData.js';
 import { HUNTS } from '../src/lib/huntCatalog.js';
+import { handleScientistRoutes } from './scientist';
 
 const COOKIE = 'youneek_session';
 const PUBLIC_FIELDS = `star_id, owner_name, tier, custom_myth, created_at`;
@@ -58,6 +59,10 @@ async function api(request: Request, env: Env, player: string): Promise<Response
   const route = `${request.method} ${url.pathname}`;
   if (route === 'GET /api/health') return json({ ok: true });
   if (route === 'GET /api/config') return json({ claimMode: env.CLAIM_MODE === 'demo' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname) ? 'demo' : 'disabled' });
+  // Scientist Mode proxies (no D1). Keep ahead of the STARS_DB gate so offline-capable
+  // clients can still hit these when only enrichment is needed.
+  const scientist = await handleScientistRoutes(request, json);
+  if (scientist) return scientist;
   const db = env.STARS_DB;
   if (!db) throw new ApiError(503, 'STARS_DB binding is required');
   if (route === 'GET /api/stars') {
